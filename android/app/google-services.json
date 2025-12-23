@@ -12,7 +12,20 @@
           "package_name": "com.example.barbershop"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "553242494396-t1ubfsorbfp896hfaee7tp1fl26e9clg.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.barbershop",
+            "certificate_hash": "8f52f71e9b08f4adf89648801e0d569f33013192"
+          }
+        },
+        {
+          "client_id": "553242494396-1ma5r80ivl5jlg91m4makq5h9u6bgfrm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBWKNw5eCjisT_1fFX0KeNd26ABdiNA1W0"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "553242494396-1ma5r80ivl5jlg91m4makq5h9u6bgfrm.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "553242494396-oqkd3qas7b4q9738i0g40s3d3dqnpanq.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.barbershop"
+              }
+            }
+          ]
         }
       }
     }

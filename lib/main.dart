@@ -1,17 +1,25 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:barbershop/core/theme/app_theme.dart';
-import 'package:barbershop/features/appointments/presentation/pages/appointments_page.dart';
-import 'package:barbershop/shared/services/push_notification_service.dart';
-import 'package:barbershop/features/auth/presentation/pages/login_page.dart';
-import 'package:barbershop/features/profile/presentation/pages/profile_page.dart';
-import 'package:barbershop/features/home/presentation/pages/home_page.dart';
-import 'package:barbershop/shared/widgets/custom_bottom_nav.dart';
-import 'package:barbershop/firebase_options.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:gap/gap.dart';
+
+import 'package:barbershop/firebase_options.dart';
+import 'package:barbershop/core/theme/app_theme.dart';
+import 'package:barbershop/shared/services/push_notification_service.dart';
+import 'package:barbershop/shared/widgets/custom_bottom_nav.dart';
+
+// Pages
+import 'package:barbershop/features/auth/data/auth_service.dart';
+import 'package:barbershop/features/auth/presentation/pages/login_page.dart';
+import 'package:barbershop/features/home/presentation/pages/home_page.dart';
+import 'package:barbershop/features/appointments/presentation/pages/appointments_page.dart';
+import 'package:barbershop/features/profile/presentation/pages/profile_page.dart';
+import 'package:barbershop/features/admin/presentation/pages/admin_home_page.dart';
+import 'package:barbershop/features/splash/presentation/pages/splash_page.dart'; // Import Splash Page
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,18 +30,6 @@ void main() async {
 
   // Enable Firestore Logging
   FirebaseFirestore.setLoggingEnabled(true);
-
-  // Test Read
-  print('TEST: Attempting to read users collection...');
-  FirebaseFirestore.instanceFor(
-          app: Firebase.app(), databaseId: 'barbershop-native')
-      .collection('users')
-      .get()
-      .then((snapshot) {
-    print('TEST: Successfully read ${snapshot.docs.length} users.');
-  }).catchError((e) {
-    print('TEST: FAILED to read users: $e');
-  });
 
   // Initialize Push Notifications (Only on Mobile)
   if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
@@ -64,7 +60,37 @@ class MyApp extends StatelessWidget {
       supportedLocales: const [
         Locale('pt', 'BR'),
       ],
-      home: const LoginPage(),
+      // Initial Entry Point is the Splash Screen
+      home: const SplashPage(),
+    );
+  }
+}
+
+// AuthGate handles the logic: If logged in -> Home/Admin, if logged out -> Login
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: AuthService().authStateChanges,
+      builder: (context, snapshot) {
+        // Verify if connection is valid
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (snapshot.hasData) {
+          // User is logged in
+          if (snapshot.data!.email == 'admin@barber.com') {
+            return const AdminHomePage();
+          }
+          return const MainScreen();
+        }
+
+        // User is expected to log in
+        return const LoginPage();
+      },
     );
   }
 }

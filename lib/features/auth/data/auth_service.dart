@@ -40,6 +40,49 @@ class AuthService {
     }
   }
 
+  // Start Phone Cookie
+  Future<void> verifyPhoneNumber({
+    required String phoneNumber,
+    required Function(String verificationId) onCodeSent,
+    required Function(String message) onError,
+  }) async {
+    try {
+      await _auth.verifyPhoneNumber(
+        phoneNumber: phoneNumber,
+        verificationCompleted: (PhoneAuthCredential credential) async {
+          // Auto-retrieval or instant verification (Android only mostly)
+          await _auth.signInWithCredential(credential);
+        },
+        verificationFailed: (FirebaseAuthException e) {
+          onError(e.message ?? 'Falha na verificação de telefone');
+        },
+        codeSent: (String verificationId, int? resendToken) {
+          onCodeSent(verificationId);
+        },
+        codeAutoRetrievalTimeout: (String verificationId) {
+          // Timeout handling if needed
+        },
+      );
+    } catch (e) {
+      onError(e.toString());
+    }
+  }
+
+  // Sign in with OTP
+  Future<UserCredential?> signInWithOtp(
+      String verificationId, String smsCode) async {
+    try {
+      final credential = PhoneAuthProvider.credential(
+        verificationId: verificationId,
+        smsCode: smsCode,
+      );
+      return await _auth.signInWithCredential(credential);
+    } catch (e) {
+      print('Error signing in with OTP: $e');
+      rethrow;
+    }
+  }
+
   // Sign in Anonymously (For Testing/Guest)
   Future<UserCredential?> signInAnonymously() async {
     try {

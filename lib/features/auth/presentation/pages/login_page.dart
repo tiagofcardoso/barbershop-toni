@@ -1,14 +1,131 @@
-import 'dart:io';
-import 'package:flutter/foundation.dart';
-import 'package:barbershop/features/auth/data/auth_service.dart'; // Import AuthService
+import 'package:barbershop/features/auth/data/auth_service.dart';
 import 'package:barbershop/shared/services/firestore_service.dart';
 import 'package:barbershop/features/admin/presentation/pages/admin_home_page.dart';
 import 'package:barbershop/main.dart'; // Circular dependency if not careful, but okay for navigation for now.
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl_phone_field/intl_phone_field.dart';
 
-class LoginPage extends StatelessWidget {
+class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _otpController = TextEditingController();
+
+  String _fullPhoneNumber = ''; // Store complete number with country code
+
+  bool _isLoading = false;
+  bool _isCodeSent = false;
+  String? _verificationId;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    _otpController.dispose();
+    super.dispose();
+  }
+
+  void _verifyPhone() async {
+    final name = _nameController.text.trim();
+
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Por favor, digite seu nome')),
+      );
+      return;
+    }
+
+    if (_fullPhoneNumber.isEmpty || _fullPhoneNumber.length < 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Por favor, digite um telefone válido')),
+      );
+      return;
+    }
+
+    /* if (phone.isEmpty || phone.length < 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text(
+                'Por favor, digite um telefone válido (ex: +5511999999999)')),
+      );
+      return;
+    } */
+
+    setState(() => _isLoading = true);
+
+    await AuthService().verifyPhoneNumber(
+      phoneNumber: _fullPhoneNumber,
+      onCodeSent: (verificationId) {
+        if (mounted) {
+          setState(() {
+            _verificationId = verificationId;
+            _isCodeSent = true;
+            _isLoading = false;
+          });
+        }
+      },
+      onError: (message) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Erro: $message')),
+          );
+        }
+      },
+    );
+  }
+
+  void _signInWithOtp() async {
+    final otp = _otpController.text.trim();
+    if (_verificationId == null || otp.isEmpty) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      final userCredential =
+          await AuthService().signInWithOtp(_verificationId!, otp);
+
+      if (userCredential != null && userCredential.user != null) {
+        // Update user name in Firebase Auth
+        await userCredential.user!
+            .updateDisplayName(_nameController.text.trim());
+        await userCredential.user!.reload(); // Reload to apply changes locally
+
+        // Save to Firestore
+        await FirestoreService().saveUser(FirebaseAuth
+            .instance.currentUser!); // Refetch current user to get updated name
+
+        if (mounted) {
+          final authService = AuthService();
+          if (authService.isAdmin) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => const AdminHomePage()),
+            );
+          } else {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => const MainScreen()),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao validar código: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -63,180 +180,129 @@ class LoginPage extends StatelessWidget {
                               height: 1.2,
                             ),
                       ),
-                      const Gap(8),
-                      Text(
-                        'Agende seu horário com estilo',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                              color: Colors.grey[600],
-                            ),
-                      ),
-                      const Spacer(),
-                      // Google Login Button (Hide on Windows as it's not supported natively yet)
-                      if (kIsWeb || !Platform.isWindows)
-                        OutlinedButton(
-                          onPressed: () async {
-                            // Real Google Login
-                            print('Attempting Google Login...');
-                            final authService = AuthService();
-                            try {
-                              final userCredential =
-                                  await authService.signInWithGoogle();
-                              print(
-                                  'Google Login Result: ${userCredential?.user?.email}');
+                      const Gap(48),
 
-                              if (userCredential != null && context.mounted) {
-                                print('Saving Google user to Firestore...');
-                                // Save user to Firestore
-                                await FirestoreService()
-                                    .saveUser(userCredential.user!);
-                                print(
-                                    'Google User saved. Checking Admin role...');
-
-                                if (authService.isAdmin) {
-                                  print(
-                                      'User is Admin. Navigating to AdminHomePage.');
-                                  Navigator.of(context).pushReplacement(
-                                    MaterialPageRoute(
-                                        builder: (_) => const AdminHomePage()),
-                                  );
-                                } else {
-                                  print(
-                                      'User is Client. Navigating to MainScreen.');
-                                  Navigator.of(context).pushReplacement(
-                                    MaterialPageRoute(
-                                        builder: (_) => const MainScreen()),
-                                  );
-                                }
-                              } else {
-                                print(
-                                    'Google Login failed: userCredential is null (likely canceled)');
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                        content:
-                                            Text('Login falhou ou cancelado')),
-                                  );
-                                }
-                              }
-                            } catch (e) {
-                              print('EXCEPTION during Google Login: $e');
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                      content:
-                                          Text('Erro no login Google: $e')),
-                                );
-                              }
-                            }
-                          },
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            side: BorderSide(color: Colors.grey[300]!),
-                            shape: RoundedRectangleBorder(
+                      if (!_isCodeSent) ...[
+                        // Step 1: Name and Phone Input
+                        TextField(
+                          controller: _nameController,
+                          decoration: InputDecoration(
+                            labelText: 'Seu Nome',
+                            prefixIcon: const Icon(Icons.person_outline),
+                            border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              // Placeholder for G icon if we don't have svg asset yet
-                              const Icon(Icons.g_mobiledata,
-                                  size: 28, color: Colors.blue),
-                              const Gap(8),
-                              Text(
-                                'Entrar com Google',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.black87,
-                                    ),
-                              ),
-                            ],
-                          ),
                         ),
-                      if (kIsWeb || !Platform.isWindows) const Gap(16),
-                      // Phone Login Button
-                      ElevatedButton(
-                        onPressed: () async {
-                          // Guest Login
-                          print('Attempting Guest Login...');
-                          final authService = AuthService();
-                          try {
-                            final userCredential =
-                                await authService.signInAnonymously();
-                            print(
-                                'Guest Login Result: ${userCredential?.user?.uid}');
-
-                            if (userCredential != null && context.mounted) {
-                              print('Saving guest user to Firestore...');
-                              // Save user to Firestore with timeout
-                              try {
-                                await FirestoreService()
-                                    .saveUser(userCredential.user!)
-                                    .timeout(const Duration(seconds: 5));
-                                print('Guest User saved successfully.');
-                              } catch (e) {
-                                print(
-                                    'WARNING: Failed to save user to Firestore (or timed out): $e');
-                                // Continue anyway to allow access even if DB write fails
-                              }
-
-                              print('Navigating to MainScreen...');
-                              Navigator.of(context).pushReplacement(
-                                MaterialPageRoute(
-                                    builder: (_) => const MainScreen()),
-                              );
-                            } else {
-                              print(
-                                  'Guest Login failed: userCredential is null');
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                      content: Text(
-                                          'Falha ao entrar como convidado')),
-                                );
-                              }
-                            }
-                          } catch (e) {
-                            print('EXCEPTION during Guest Login: $e');
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Erro no login: $e')),
-                              );
-                            }
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.grey[800],
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.person_outline,
-                                color: Colors.white),
-                            const Gap(8),
-                            Text(
-                              'Entrar como Convidado',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white,
-                                  ),
+                        const Gap(16),
+                        IntlPhoneField(
+                          controller: _phoneController,
+                          decoration: InputDecoration(
+                            labelText: 'Telefone',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                          ],
+                          ),
+                          initialCountryCode:
+                              'PT', // Default to Portugal as requested logic context implies
+                          languageCode: 'pt',
+                          onChanged: (phone) {
+                            _fullPhoneNumber = phone.completeNumber;
+                          },
+                          onCountryChanged: (country) {
+                            print('Country changed to: ' + country.name);
+                          },
                         ),
-                      ),
-                      const Gap(48),
+                        const Gap(24),
+                        SizedBox(
+                          height: 50,
+                          child: ElevatedButton(
+                            onPressed: _isLoading
+                                ? null
+                                : () {
+                                    // Need to construct full phone number manually or use a state variable since controller only has the digits
+                                    // But wait, IntlPhoneField has a controller that gives the raw text.
+                                    // We need the country code + text.
+                                    // Let's simplify: pass the full number to _verifyPhone via a callback or access checking logic.
+                                    // BETTER: Update _verifyPhone to read from state if possible, or simpler:
+                                    // Let's just trust variable binding.
+                                    // Actually, _phoneController in IntlPhoneField is for the NATIONAL number.
+                                    // We need to concatenate country code.
+                                    // Let's use `onChanged` to update a class-level variable `_fullPhoneNumber`.
+                                    _verifyPhone();
+                                  },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.black,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: _isLoading
+                                ? const CircularProgressIndicator(
+                                    color: Colors.white)
+                                : const Text(
+                                    'Receber Código',
+                                    style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold),
+                                  ),
+                          ),
+                        ),
+                      ] else ...[
+                        // Step 2: OTP Input
+                        Text(
+                          'Enviamos um código para ${_phoneController.text}',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                        const Gap(24),
+                        TextField(
+                          controller: _otpController,
+                          keyboardType: TextInputType.number,
+                          textAlign: TextAlign.center,
+                          maxLength: 6,
+                          style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 8),
+                          decoration: InputDecoration(
+                            counterText: '',
+                            hintText: '000000',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                        const Gap(24),
+                        SizedBox(
+                          height: 50,
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _signInWithOtp,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.black,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: _isLoading
+                                ? const CircularProgressIndicator(
+                                    color: Colors.white)
+                                : const Text(
+                                    'Entrar',
+                                    style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold),
+                                  ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => setState(() => _isCodeSent = false),
+                          child: const Text('Alterar número'),
+                        ),
+                      ],
+                      const Spacer(),
                     ],
                   ),
                 ),
