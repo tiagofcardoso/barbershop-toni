@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "553242494396",
+    "project_id": "barbershop-toni",
+    "storage_bucket": "barbershop-toni.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:553242494396:android:0afbeff38ca28cbe2517b9",
+        "android_client_info": {
+          "package_name": "com.example.barbershop"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBWKNw5eCjisT_1fFX0KeNd26ABdiNA1W0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
