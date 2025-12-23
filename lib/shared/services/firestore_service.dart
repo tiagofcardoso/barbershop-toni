@@ -100,4 +100,28 @@ class FirestoreService {
         .snapshots()
         .map((snapshot) => snapshot.docs.length);
   }
+
+  // Get Booked Slots for a Date
+  Stream<List<DateTime>> getBookedSlotsStream(DateTime date) {
+    // Create start and end of the day
+    final startOfDay = DateTime(date.year, date.month, date.day, 0, 0, 0);
+    final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
+
+    return _db
+        .collection('appointments')
+        .where('dateTime', isGreaterThanOrEqualTo: startOfDay)
+        .where('dateTime', isLessThanOrEqualTo: endOfDay)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .where((doc) {
+            final data = doc.data();
+            final status = data['status'] as String?;
+            // Filter out cancelled appointments
+            return status != 'Cancelado';
+          })
+          .map((doc) => (doc.data()['dateTime'] as Timestamp).toDate())
+          .toList();
+    });
+  }
 }
