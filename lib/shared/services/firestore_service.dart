@@ -18,6 +18,98 @@ class FirestoreService {
     }, SetOptions(merge: true));
   }
 
+  // --- Services Management ---
+
+  // Get Services Stream
+  Stream<List<Map<String, dynamic>>> getServicesStream() {
+    return _db.collection('services').snapshots().map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        data['id'] = doc.id;
+        return data;
+      }).toList();
+    });
+  }
+
+  // Seed Services (Migration Tool)
+  Future<void> seedServices(List<dynamic> services) async {
+    final batch = _db.batch();
+    for (var service in services) {
+      final docRef = _db.collection('services').doc(); // Auto-ID
+      batch.set(docRef, {
+        'name': service.name,
+        'price': service.price,
+        'durationMinutes': service.durationMinutes,
+        'imageUrl': service.imageUrl,
+        'description': 'Serviço profissional', // Default
+      });
+    }
+    await batch.commit();
+  }
+
+  // Add Service
+  Future<void> addService(Map<String, dynamic> data) async {
+    await _db.collection('services').add(data);
+  }
+
+  // Update Service
+  Future<void> updateService(String id, Map<String, dynamic> data) async {
+    await _db.collection('services').doc(id).update(data);
+  }
+
+  // Delete Service
+  Future<void> deleteService(String id) async {
+    await _db.collection('services').doc(id).delete();
+  }
+
+  // --- End Services Management ---
+
+  // --- Products Management ---
+
+  // Get Products Stream
+  Stream<List<Map<String, dynamic>>> getProductsStream() {
+    return _db.collection('products').snapshots().map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        data['id'] = doc.id;
+        return data;
+      }).toList();
+    });
+  }
+
+  // Add Product
+  Future<void> addProduct(Map<String, dynamic> data) async {
+    await _db.collection('products').add(data);
+  }
+
+  // Update Product
+  Future<void> updateProduct(String id, Map<String, dynamic> data) async {
+    await _db.collection('products').doc(id).update(data);
+  }
+
+  // Delete Product
+  Future<void> deleteProduct(String id) async {
+    await _db.collection('products').doc(id).delete();
+  }
+
+  // --- End Products Management ---
+
+  // --- Settings Management ---
+
+  Future<Map<String, dynamic>?> getBusinessSettings() async {
+    final doc = await _db.collection('settings').doc('business').get();
+    return doc.data();
+  }
+
+  Future<void> saveBusinessSettings(Map<String, dynamic> data) async {
+    await _db
+        .collection('settings')
+        .doc('business')
+        .set(data, SetOptions(merge: true));
+  }
+
+  // --- End Settings Management ---
+
   // --- Appointments ---
 
   // Stream all appointments (for Admin)

@@ -107,31 +107,58 @@ class HomePage extends StatelessWidget {
                   ),
                 ),
               ),
-              SliverGrid(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final service = MockData.services[index];
-                    return ServiceCard(
-                      service: service,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => BookingPage(service: service),
-                          ),
-                        );
-                      },
+              StreamBuilder<List<Map<String, dynamic>>>(
+                  stream: FirestoreService().getServicesStream(),
+                  builder: (context, snapshot) {
+                    List<ServiceModel> services = [];
+                    if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+                      services = snapshot.data!
+                          .map((data) => ServiceModel.fromMap(data))
+                          .toList();
+                    } else if (snapshot.hasError) {
+                      // Fallback to mock data if error
+                      services = MockData.services;
+                    } else {
+                      // Loading state: showing mock or empty
+                      // Let's show MockData while loading for better UX or just loading
+                      // showing MockData as initial helps "skeleton" effect if matching
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        services = MockData.services;
+                      }
+                    }
+
+                    // If completely empty after load, stick to MockData to avoid blank screen
+                    // (Optional decision: Force Firestore? No, safety first for demo)
+                    if (services.isEmpty) services = MockData.services;
+
+                    return SliverGrid(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          final service = services[index];
+                          return ServiceCard(
+                            service: service,
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      BookingPage(service: service),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                        childCount: services.length,
+                      ),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        mainAxisSpacing: 24,
+                        crossAxisSpacing: 20,
+                        childAspectRatio: 0.75,
+                      ),
                     );
-                  },
-                  childCount: MockData.services.length,
-                ),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 24,
-                  crossAxisSpacing: 20,
-                  childAspectRatio: 0.75,
-                ),
-              ),
+                  }),
               const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
             ],
           ),

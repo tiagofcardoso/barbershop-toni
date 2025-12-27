@@ -12,6 +12,16 @@ class ServiceModel {
     required this.price,
     required this.durationMinutes,
   });
+
+  factory ServiceModel.fromMap(Map<String, dynamic> map) {
+    return ServiceModel(
+      id: map['id'] ?? '',
+      name: map['name'] ?? '',
+      imageUrl: map['imageUrl'] ?? '',
+      price: (map['price'] ?? 0.0).toDouble(),
+      durationMinutes: map['durationMinutes'] ?? 0,
+    );
+  }
 }
 
 class MockData {

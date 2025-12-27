@@ -127,6 +127,67 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  bool _isAdminLogin = false;
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+
+  void _signInAdmin() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Por favor, preencha todos os campos')));
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      // Direct Firebase Auth for Admin
+      await FirebaseAuth.instance
+          .signInWithEmailAndPassword(email: email, password: password);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'user-not-found' ||
+          e.code == 'invalid-credential' ||
+          e.code == 'wrong-password') {
+        // Dev helper: Create if doesn't exist (Only for admin specific email)
+        if (email == 'admin@barber.com') {
+          try {
+            await FirebaseAuth.instance.createUserWithEmailAndPassword(
+                email: email, password: password);
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content: Text('Admin criado com sucesso! Entrando...')));
+            }
+          } catch (createError) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Erro ao criar admin: $createError')));
+            }
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Usuário ou senha incorretos.')));
+          }
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text('Erro: ${e.message}')));
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Erro de login: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -134,176 +195,230 @@ class _LoginPageState extends State<LoginPage> {
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
-            return SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+            return Center(
               child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: constraints.maxHeight,
-                ),
-                child: IntrinsicHeight(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Spacer(),
-                      // Logo
-                      Center(
-                        child: Container(
-                          width: 120,
-                          height: 120,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            image: const DecorationImage(
-                              image: AssetImage('assets/icon/app_icon.png'),
-                              fit: BoxFit.contain,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.1),
-                                blurRadius: 20,
-                                offset: const Offset(0, 10),
+                constraints: const BoxConstraints(maxWidth: 400),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight,
+                    ),
+                    child: IntrinsicHeight(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Spacer(),
+                          // Logo
+                          Center(
+                            child: Container(
+                              width: 120,
+                              height: 120,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                image: const DecorationImage(
+                                  image: AssetImage('assets/icon/app_icon.png'),
+                                  fit: BoxFit.contain,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.1),
+                                    blurRadius: 20,
+                                    offset: const Offset(0, 10),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const Gap(32),
-                      Text(
-                        'Antonio\nBarber Shop',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context)
-                            .textTheme
-                            .headlineMedium
-                            ?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black,
-                              height: 1.2,
                             ),
-                      ),
-                      const Gap(48),
+                          ),
+                          const Gap(32),
+                          Text(
+                            'Antonio\nBarber Shop',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black,
+                                  height: 1.2,
+                                ),
+                          ),
+                          const Gap(48),
 
-                      if (!_isCodeSent) ...[
-                        // Step 1: Name and Phone Input
-                        TextField(
-                          controller: _nameController,
-                          decoration: InputDecoration(
-                            labelText: 'Seu Nome',
-                            prefixIcon: const Icon(Icons.person_outline),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                        const Gap(16),
-                        IntlPhoneField(
-                          controller: _phoneController,
-                          decoration: InputDecoration(
-                            labelText: 'Telefone',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          initialCountryCode:
-                              'PT', // Default to Portugal as requested logic context implies
-                          languageCode: 'pt',
-                          onChanged: (phone) {
-                            _fullPhoneNumber = phone.completeNumber;
-                          },
-                          onCountryChanged: (country) {
-                            print('Country changed to: ' + country.name);
-                          },
-                        ),
-                        const Gap(24),
-                        SizedBox(
-                          height: 50,
-                          child: ElevatedButton(
-                            onPressed: _isLoading
-                                ? null
-                                : () {
-                                    // Need to construct full phone number manually or use a state variable since controller only has the digits
-                                    // But wait, IntlPhoneField has a controller that gives the raw text.
-                                    // We need the country code + text.
-                                    // Let's simplify: pass the full number to _verifyPhone via a callback or access checking logic.
-                                    // BETTER: Update _verifyPhone to read from state if possible, or simpler:
-                                    // Let's just trust variable binding.
-                                    // Actually, _phoneController in IntlPhoneField is for the NATIONAL number.
-                                    // We need to concatenate country code.
-                                    // Let's use `onChanged` to update a class-level variable `_fullPhoneNumber`.
-                                    _verifyPhone();
-                                  },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.black,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
+                          if (_isAdminLogin) ...[
+                            // Admin Login Form
+                            const Text('Acesso Administrativo',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(fontWeight: FontWeight.bold)),
+                            const Gap(24),
+                            TextField(
+                              controller: _emailController,
+                              decoration: InputDecoration(
+                                labelText: 'E-mail',
+                                prefixIcon: const Icon(Icons.email_outlined),
+                                border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12)),
                               ),
                             ),
-                            child: _isLoading
-                                ? const CircularProgressIndicator(
-                                    color: Colors.white)
-                                : const Text(
-                                    'Receber Código',
-                                    style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold),
-                                  ),
-                          ),
-                        ),
-                      ] else ...[
-                        // Step 2: OTP Input
-                        Text(
-                          'Enviamos um código para ${_phoneController.text}',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.grey[600]),
-                        ),
-                        const Gap(24),
-                        TextField(
-                          controller: _otpController,
-                          keyboardType: TextInputType.number,
-                          textAlign: TextAlign.center,
-                          maxLength: 6,
-                          style: const TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 8),
-                          decoration: InputDecoration(
-                            counterText: '',
-                            hintText: '000000',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
+                            const Gap(16),
+                            TextField(
+                              controller: _passwordController,
+                              decoration: InputDecoration(
+                                labelText: 'Senha',
+                                prefixIcon: const Icon(Icons.lock_outline),
+                                border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12)),
+                              ),
+                              obscureText: true,
                             ),
-                          ),
-                        ),
-                        const Gap(24),
-                        SizedBox(
-                          height: 50,
-                          child: ElevatedButton(
-                            onPressed: _isLoading ? null : _signInWithOtp,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.black,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
+                            const Gap(24),
+                            SizedBox(
+                              height: 50,
+                              child: ElevatedButton(
+                                onPressed: _isLoading ? null : _signInAdmin,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.black,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                child: _isLoading
+                                    ? const CircularProgressIndicator(
+                                        color: Colors.white)
+                                    : const Text('Entrar como Admin',
+                                        style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold)),
                               ),
                             ),
-                            child: _isLoading
-                                ? const CircularProgressIndicator(
-                                    color: Colors.white)
-                                : const Text(
-                                    'Entrar',
-                                    style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold),
+                            TextButton(
+                              onPressed: () =>
+                                  setState(() => _isAdminLogin = false),
+                              child: const Text('Voltar para Login de Cliente'),
+                            ),
+                          ] else if (!_isCodeSent) ...[
+                            // Step 1: Name and Phone Input
+                            TextField(
+                              controller: _nameController,
+                              decoration: InputDecoration(
+                                labelText: 'Seu Nome',
+                                prefixIcon: const Icon(Icons.person_outline),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                            const Gap(16),
+                            IntlPhoneField(
+                              controller: _phoneController,
+                              decoration: InputDecoration(
+                                labelText: 'Telefone',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              initialCountryCode:
+                                  'PT', // Default to Portugal as requested logic context implies
+                              languageCode: 'pt',
+                              onChanged: (phone) {
+                                _fullPhoneNumber = phone.completeNumber;
+                              },
+                              onCountryChanged: (country) {
+                                print('Country changed to: ' + country.name);
+                              },
+                            ),
+                            const Gap(24),
+                            SizedBox(
+                              height: 50,
+                              child: ElevatedButton(
+                                onPressed: _isLoading
+                                    ? null
+                                    : () {
+                                        _verifyPhone();
+                                      },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.black,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
                                   ),
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () => setState(() => _isCodeSent = false),
-                          child: const Text('Alterar número'),
-                        ),
-                      ],
-                      const Spacer(),
-                    ],
+                                ),
+                                child: _isLoading
+                                    ? const CircularProgressIndicator(
+                                        color: Colors.white)
+                                    : const Text(
+                                        'Receber Código',
+                                        style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold),
+                                      ),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () =>
+                                  setState(() => _isAdminLogin = true),
+                              child: const Text('Sou Admin'),
+                            ),
+                          ] else ...[
+                            // Step 2: OTP Input
+                            Text(
+                              'Enviamos um código para ${_phoneController.text}',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Colors.grey[600]),
+                            ),
+                            const Gap(24),
+                            TextField(
+                              controller: _otpController,
+                              keyboardType: TextInputType.number,
+                              textAlign: TextAlign.center,
+                              maxLength: 6,
+                              style: const TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 8),
+                              decoration: InputDecoration(
+                                counterText: '',
+                                hintText: '000000',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                            const Gap(24),
+                            SizedBox(
+                              height: 50,
+                              child: ElevatedButton(
+                                onPressed: _isLoading ? null : _signInWithOtp,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.black,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                child: _isLoading
+                                    ? const CircularProgressIndicator(
+                                        color: Colors.white)
+                                    : const Text(
+                                        'Entrar',
+                                        style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold),
+                                      ),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () =>
+                                  setState(() => _isCodeSent = false),
+                              child: const Text('Alterar número'),
+                            ),
+                          ],
+                          const Spacer(),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),

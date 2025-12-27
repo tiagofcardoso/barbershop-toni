@@ -567,7 +567,7 @@ class _BookingPageState extends State<BookingPage> {
                           'price': widget.service.price,
                           'durationMinutes':
                               duration, // Save calculated duration
-                          'status': 'Pendente',
+                          'status': 'Confirmado',
                         });
 
                         if (context.mounted) {
