@@ -35,6 +35,10 @@ class CustomBottomNav extends StatelessWidget {
             label: 'Agenda',
           ),
           BottomNavigationBarItem(
+            icon: Icon(Icons.content_cut_rounded),
+            label: 'Produtos',
+          ),
+          BottomNavigationBarItem(
             icon: Icon(Icons.person_outline_rounded),
             label: 'Perfil',
           ),

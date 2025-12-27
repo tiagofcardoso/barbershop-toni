@@ -4,6 +4,7 @@ import 'package:barbershop/features/home/data/mock_data.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class BookingPage extends StatefulWidget {
   final ServiceModel service;
@@ -19,28 +20,6 @@ class _BookingPageState extends State<BookingPage> {
   late DateTime _selectedDate;
   String? _selectedTime;
 
-  final List<String> _timeSlots = [
-    '09:00',
-    '09:30',
-    '10:00',
-    '10:30',
-    '11:00',
-    '11:30',
-    '13:00',
-    '13:30',
-    '14:00',
-    '14:30',
-    '15:00',
-    '15:30',
-    '16:00',
-    '16:30',
-    '17:00',
-    '17:30',
-    '18:00',
-    '18:30',
-    '19:00'
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -49,7 +28,6 @@ class _BookingPageState extends State<BookingPage> {
     try {
       _selectedDate = _dates.firstWhere((date) => _isDayAvailable(date));
     } catch (e) {
-      // Fallback if no dates available (unlikely with 60 days)
       if (_dates.isNotEmpty) {
         _selectedDate = _dates.first;
       } else {
@@ -61,7 +39,6 @@ class _BookingPageState extends State<BookingPage> {
   void _generateDates() {
     _dates = [];
     final now = DateTime.now();
-    // Generate for next 60 days (Show ALL days)
     for (int i = 0; i < 60; i++) {
       _dates.add(now.add(Duration(days: i)));
     }
@@ -69,7 +46,6 @@ class _BookingPageState extends State<BookingPage> {
 
   bool _isDayAvailable(DateTime date) {
     // 1. Check Work Days (Tue-Sat)
-    // DateTime.monday = 1, ... DateTime.sunday = 7
     if (date.weekday == DateTime.sunday || date.weekday == DateTime.monday) {
       return false;
     }
@@ -81,7 +57,6 @@ class _BookingPageState extends State<BookingPage> {
   }
 
   bool _isHoliday(DateTime date) {
-    // Portugal Fixed Holidays
     final holidays = {
       '1,1': 'Ano Novo',
       '4,25': 'Dia da Liberdade',
@@ -96,6 +71,185 @@ class _BookingPageState extends State<BookingPage> {
     };
     final key = '${date.month},${date.day}';
     return holidays.containsKey(key);
+  }
+
+  /// Calculates the duration of the service for a specific start time.
+  /// Handles the rule: "a primeira marcação da parte da tarde durante a semana, seria de 45 min"
+  /// Implies adding 15 min padding/duration to the first afternoon slot on weekdays.
+  int _getServiceDuration(String startTime, bool isWeekday) {
+    int baseDuration = widget.service.durationMinutes;
+
+    // Special rule for 15:15 slot on Weekdays
+    if (isWeekday && startTime == '15:15') {
+      // "já cabelo e barba seria 1h 15min total". Normal is 60. So +15.
+      // "mesmo que somente cabelo" (Normal 45). "seria de 45".
+      // If standard haircut is 45, and user says "seria de 45", then no change?
+      // But context implies a change. "logo... seria de 45".
+      // Maybe standard haircut is 30? In mock_data, `Corte Degradê` is 45.
+      // Let's assume +15 mins for ANY service at 15:15 to be safe/consistent with logic.
+      // (Or maybe User means "Min duration is 45"?).
+      // Given "já cabelo e barba seria 1h 15min" (Normal 60 -> 75), it's definitely +15.
+      return baseDuration + 15;
+    }
+
+    return baseDuration;
+  }
+
+  /// Generates available time slots based on the selected date and service rules.
+  List<String> _generateCandidateSlots(DateTime date) {
+    final isSaturday = date.weekday == DateTime.saturday;
+    final isWeekday =
+        !isSaturday; // and not Sun/Mon because of _isDayAvailable check
+
+    List<String> slots = [];
+
+    // --- Morning Slots (Common) ---
+    // 09:00 to 12:30 (intervals of 30 min)
+    // 09:00, 09:30, 10:00, 10:30, 11:00, 11:30, 12:00, 12:30
+    var morning = [
+      '09:00',
+      '09:30',
+      '10:00',
+      '10:30',
+      '11:00',
+      '11:30',
+      '12:00',
+      '12:30'
+    ];
+    slots.addAll(morning);
+
+    // --- Afternoon Slots ---
+    if (isWeekday) {
+      // Lunch 13:00 - 15:15.
+      // First slot: 15:15.
+      slots.add('15:15');
+      // Subsequent slots: 16:00, 16:30, 17:00 ... 18:30.
+      // 15:15 + 45m = 16:00.
+      var afternoon = ['16:00', '16:30', '17:00', '17:30', '18:00', '18:30'];
+      slots.addAll(afternoon);
+    } else {
+      // Saturday
+      // Lunch 13:00 - 15:00. (Assuming lunch ends 15:00 based on "Sábado das 13 às 15h")
+      // First slot: 15:00.
+      // Closes 18:00.
+      // Slots: 15:00, 15:30, 16:00, 16:30, 17:00, 17:30.
+      var afternoonSat = ['15:00', '15:30', '16:00', '16:30', '17:00', '17:30'];
+      slots.addAll(afternoonSat);
+    }
+
+    return slots;
+  }
+
+  Stream<List<String>> _getAvailableSlotsStream(DateTime date) {
+    return FirestoreService()
+        .getBookedAppointmentsOnDate(date)
+        .map((bookedDocs) {
+      List<Map<String, dynamic>> bookings = [];
+      for (var doc in bookedDocs) {
+        final start = (doc['dateTime'] as Timestamp).toDate();
+        int duration = doc['durationMinutes'] ?? 0;
+
+        if (duration == 0) {
+          // Fallback: try to find service in MockData
+          final serviceName = doc['serviceName'] as String?;
+          if (serviceName != null) {
+            final mockService = MockData.services.firstWhere(
+                (s) => s.name == serviceName,
+                orElse: () => MockData.services.first // Fallback
+                );
+            duration = mockService.durationMinutes;
+          } else {
+            duration = 30; // Default fallback
+          }
+        }
+        bookings.add({
+          'start': start,
+          'end': start.add(Duration(minutes: duration)),
+        });
+      }
+
+      // 2. Generate Candidate Slots
+      List<String> candidates = _generateCandidateSlots(date);
+      List<String> available = [];
+
+      final isSaturday = date.weekday == DateTime.saturday;
+      final isWeekday = !isSaturday;
+
+      // 3. Filter Candidates
+      for (var timeStr in candidates) {
+        final timeParts = timeStr.split(':');
+        final startDateTime = DateTime(date.year, date.month, date.day,
+            int.parse(timeParts[0]), int.parse(timeParts[1]));
+
+        int effectiveDuration = _getServiceDuration(timeStr, isWeekday);
+        final endDateTime =
+            startDateTime.add(Duration(minutes: effectiveDuration));
+
+        // Rule: "última marcação somente cabelo de manhã, 12:30… já cabelo e barba, 12h"
+        // Only applies to morning slots (before 13:00)
+        if (startDateTime.hour < 13) {
+          final isHairAndBeard =
+              widget.service.name.toLowerCase().contains('barba') &&
+                  widget.service.name.toLowerCase().contains('cabelo');
+
+          if (isHairAndBeard) {
+            // Limit 12:00
+            if (startDateTime.hour > 12 ||
+                (startDateTime.hour == 12 && startDateTime.minute > 0)) {
+              continue;
+            }
+          } else {
+            // Limit 12:30 (Hair, Beard alone, etc)
+            if (startDateTime.hour > 12 ||
+                (startDateTime.hour == 12 && startDateTime.minute > 30)) {
+              continue;
+            }
+          }
+        }
+
+        // Rule: Closing Time Logic
+        if (isWeekday) {
+          // Limit 18:30 for Start Time automatically handled by candidate list max 18:30
+        } else {
+          // Saturday
+          final isHairAndBeard =
+              widget.service.name.toLowerCase().contains('barba') &&
+                  widget.service.name.toLowerCase().contains('cabelo');
+          if (isHairAndBeard) {
+            // Max start 17:00
+            if (startDateTime.hour > 17 ||
+                (startDateTime.hour == 17 && startDateTime.minute > 0)) {
+              continue;
+            }
+          } else {
+            // Max start 17:30
+            if (startDateTime.hour > 17 ||
+                (startDateTime.hour == 17 && startDateTime.minute > 30)) {
+              continue;
+            }
+          }
+        }
+
+        // Rule: Collision with Bookmings
+        bool hasCollision = false;
+        for (var booking in bookings) {
+          final bStart = booking['start'] as DateTime;
+          final bEnd = booking['end'] as DateTime;
+
+          // Check intersection
+          if (startDateTime.isBefore(bEnd) && endDateTime.isAfter(bStart)) {
+            hasCollision = true;
+            break;
+          }
+        }
+
+        if (!hasCollision) {
+          available.add(timeStr);
+        }
+      }
+
+      return available;
+    });
   }
 
   @override
@@ -173,7 +327,7 @@ class _BookingPageState extends State<BookingPage> {
                   const Gap(12),
                   // Horizontal Date Picker
                   SizedBox(
-                    height: 100, // Increased height to fit Month
+                    height: 100,
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: _dates.length,
@@ -184,16 +338,18 @@ class _BookingPageState extends State<BookingPage> {
                             DateUtils.isSameDay(date, _selectedDate);
                         final isAvailable = _isDayAvailable(date);
 
-                        // Format Month (e.g., "Dez")
                         final monthName =
                             DateFormat('MMM', 'pt_BR').format(date);
-                        // Capitalize first letter
                         final formattedMonth =
                             monthName[0].toUpperCase() + monthName.substring(1);
 
                         return GestureDetector(
                           onTap: isAvailable
-                              ? () => setState(() => _selectedDate = date)
+                              ? () => setState(() {
+                                    _selectedDate = date;
+                                    _selectedTime =
+                                        null; // Reset time on date change
+                                  })
                               : () {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
@@ -204,13 +360,12 @@ class _BookingPageState extends State<BookingPage> {
                                   );
                                 },
                           child: Container(
-                            width: 64, // Slightly wider
+                            width: 64,
                             decoration: BoxDecoration(
                               color: isAvailable
                                   ? (isSelected ? Colors.black : Colors.white)
                                   : Colors.grey[100],
-                              borderRadius:
-                                  BorderRadius.circular(16), // More rounded
+                              borderRadius: BorderRadius.circular(16),
                               border: Border.all(
                                 color: isAvailable
                                     ? (isSelected
@@ -231,7 +386,6 @@ class _BookingPageState extends State<BookingPage> {
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                // Month Name
                                 Text(
                                   formattedMonth,
                                   style: TextStyle(
@@ -245,13 +399,11 @@ class _BookingPageState extends State<BookingPage> {
                                   ),
                                 ),
                                 const Gap(2),
-                                // Weekday Name
                                 Text(
                                   DateFormat('EEE', 'pt_BR')
                                       .format(date)
                                       .toUpperCase()
-                                      .replaceAll(
-                                          '.', ''), // Remove dot from abbr
+                                      .replaceAll('.', ''),
                                   style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.w600,
@@ -263,7 +415,6 @@ class _BookingPageState extends State<BookingPage> {
                                   ),
                                 ),
                                 const Gap(4),
-                                // Day Number
                                 Text(
                                   date.day.toString(),
                                   style: TextStyle(
@@ -294,15 +445,25 @@ class _BookingPageState extends State<BookingPage> {
                   ),
                   const Gap(12),
                   // Time Slots Grid
-                  StreamBuilder<List<DateTime>>(
-                    stream:
-                        FirestoreService().getBookedSlotsStream(_selectedDate),
+                  StreamBuilder<List<String>>(
+                    stream: _getAvailableSlotsStream(_selectedDate),
                     builder: (context, snapshot) {
-                      Set<String> bookedTimes = {};
-                      if (snapshot.hasData) {
-                        bookedTimes = snapshot.data!
-                            .map((dt) => DateFormat('HH:mm').format(dt))
-                            .toSet();
+                      if (!snapshot.hasData) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+
+                      final availableSlots = snapshot.data!;
+
+                      if (availableSlots.isEmpty) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 20),
+                          child: Center(
+                            child: Text(
+                              'Sem horários disponíveis para esta data.',
+                              style: TextStyle(color: Colors.grey[600]),
+                            ),
+                          ),
+                        );
                       }
 
                       return GridView.builder(
@@ -315,49 +476,21 @@ class _BookingPageState extends State<BookingPage> {
                           crossAxisSpacing: 10,
                           mainAxisSpacing: 10,
                         ),
-                        itemCount: _timeSlots.length,
+                        itemCount: availableSlots.length,
                         itemBuilder: (context, index) {
-                          final time = _timeSlots[index];
-                          final isBooked = bookedTimes.contains(time);
+                          final time = availableSlots[index];
                           final isSelected = _selectedTime == time;
 
-                          // If selected time turns out to be booked (auto-refresh), deselect it
-                          if (isBooked && isSelected) {
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              if (mounted) {
-                                setState(() {
-                                  _selectedTime = null;
-                                });
-                              }
-                            });
-                          }
-
                           return GestureDetector(
-                            onTap: isBooked
-                                ? () {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                            'Este horário já está reservado.'),
-                                        duration: Duration(seconds: 1),
-                                      ),
-                                    );
-                                  }
-                                : () => setState(() => _selectedTime = time),
+                            onTap: () => setState(() => _selectedTime = time),
                             child: Container(
                               decoration: BoxDecoration(
-                                color: isBooked
-                                    ? Colors.grey[200]
-                                    : (isSelected
-                                        ? Colors.black
-                                        : Colors.white),
+                                color: isSelected ? Colors.black : Colors.white,
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
-                                  color: isBooked
-                                      ? Colors.grey[300]!
-                                      : (isSelected
-                                          ? Colors.black
-                                          : Colors.grey[300]!),
+                                  color: isSelected
+                                      ? Colors.black
+                                      : Colors.grey[300]!,
                                 ),
                               ),
                               alignment: Alignment.center,
@@ -367,14 +500,9 @@ class _BookingPageState extends State<BookingPage> {
                                   fontWeight: isSelected
                                       ? FontWeight.bold
                                       : FontWeight.w500,
-                                  color: isBooked
-                                      ? Colors.grey
-                                      : (isSelected
-                                          ? Colors.white
-                                          : Colors.black87),
-                                  decoration: isBooked
-                                      ? TextDecoration.lineThrough
-                                      : null,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : Colors.black87,
                                 ),
                               ),
                             ),
@@ -425,12 +553,20 @@ class _BookingPageState extends State<BookingPage> {
                           int.parse(timeParts[1]),
                         );
 
+                        // Calculate effective duration to save
+                        final isWeekday =
+                            _selectedDate.weekday != DateTime.saturday;
+                        final duration =
+                            _getServiceDuration(_selectedTime!, isWeekday);
+
                         await FirestoreService().addAppointment({
                           'customerId': user.uid,
                           'customerName': user.displayName ?? 'Cliente',
                           'serviceName': widget.service.name,
                           'dateTime': dateTime,
                           'price': widget.service.price,
+                          'durationMinutes':
+                              duration, // Save calculated duration
                           'status': 'Pendente',
                         });
 

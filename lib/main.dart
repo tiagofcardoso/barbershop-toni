@@ -19,7 +19,8 @@ import 'package:barbershop/features/home/presentation/pages/home_page.dart';
 import 'package:barbershop/features/appointments/presentation/pages/appointments_page.dart';
 import 'package:barbershop/features/profile/presentation/pages/profile_page.dart';
 import 'package:barbershop/features/admin/presentation/pages/admin_home_page.dart';
-import 'package:barbershop/features/splash/presentation/pages/splash_page.dart'; // Import Splash Page
+import 'package:barbershop/features/splash/presentation/pages/splash_page.dart';
+import 'package:barbershop/features/products/presentation/pages/products_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -108,6 +109,7 @@ class _MainScreenState extends State<MainScreen> {
   final List<Widget> _pages = [
     const HomePage(),
     const AppointmentsPage(),
+    const ProductsPage(),
     const ProfilePage(),
   ];
 

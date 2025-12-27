@@ -19,31 +19,57 @@ class MockData {
         ServiceModel(
           id: '1',
           name: 'Corte Degradê',
-          imageUrl:
-              'https://images.unsplash.com/photo-1622286342621-4bd786c2447c?q=80&w=800&auto=format&fit=crop', // Man getting haircut
+          imageUrl: 'assets/images/corte_degrade.png',
           price: 14.00,
           durationMinutes: 45,
         ),
         ServiceModel(
           id: '2',
-          name: 'Barba Completa',
-          imageUrl:
-              'https://images.unsplash.com/photo-1621605815971-fbc98d665033?q=80&w=800&auto=format&fit=crop', // Man with beard/shaving
+          name: 'Corte Clássico',
+          imageUrl: 'assets/images/corte_classico.png',
+          price: 14.00,
+          durationMinutes: 45,
+        ),
+        ServiceModel(
+          id: '3',
+          name: 'Corte Criança',
+          imageUrl: 'assets/images/corte_crianca.png',
           price: 14.00,
           durationMinutes: 30,
         ),
         ServiceModel(
-          id: '3',
-          name: 'Combo (Corte + Barba)',
-          imageUrl: 'assets/images/combo.jpg',
-          price: 20.00,
+          id: '4',
+          name: 'Corte Degradê Máquina',
+          imageUrl: 'assets/images/corte_degrade_maquina.png',
+          price: 12.00,
+          durationMinutes: 30,
+        ),
+        ServiceModel(
+          id: '5',
+          name: 'Barba',
+          imageUrl: 'assets/images/barba.png',
+          price: 10.00,
+          durationMinutes: 30,
+        ),
+        ServiceModel(
+          id: '6',
+          name: 'Barba e Cabelo',
+          imageUrl: 'assets/images/barba_e_cabelo.png',
+          price: 19.00,
           durationMinutes: 60,
         ),
         ServiceModel(
-          id: '4',
-          name: 'Acabamento',
-          imageUrl: 'assets/images/acabamento.png',
-          price: 10.00,
+          id: '7',
+          name: 'Barba, Cabelo e Lavagem',
+          imageUrl: 'assets/images/barba_cabelo_lavagem.png',
+          price: 20.00,
+          durationMinutes: 75,
+        ),
+        ServiceModel(
+          id: '8',
+          name: 'Depilação de Nariz',
+          imageUrl: 'assets/images/depilacao_nariz.png',
+          price: 4.00,
           durationMinutes: 15,
         ),
       ];
