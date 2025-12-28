@@ -55,9 +55,10 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Configurações da Barbearia'),
+        title: const Text('Configurações da Barbearia',
+            style: TextStyle(color: Colors.white)),
         backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())

@@ -22,7 +22,11 @@ class FirestoreService {
 
   // Get Services Stream
   Stream<List<Map<String, dynamic>>> getServicesStream() {
-    return _db.collection('services').snapshots().map((snapshot) {
+    return _db
+        .collection('services')
+        .orderBy('orderIndex')
+        .snapshots()
+        .map((snapshot) {
       return snapshot.docs.map((doc) {
         final data = doc.data();
         data['id'] = doc.id;
@@ -31,24 +35,40 @@ class FirestoreService {
     });
   }
 
-  // Seed Services (Migration Tool)
+  // Seed Services (Migration Tool) - Clears existing and re-adds
   Future<void> seedServices(List<dynamic> services) async {
-    final batch = _db.batch();
+    // 1. Delete existing services
+    final snapshot = await _db.collection('services').get();
+    final deleteBatch = _db.batch();
+    for (var doc in snapshot.docs) {
+      deleteBatch.delete(doc.reference);
+    }
+    await deleteBatch.commit();
+
+    // 2. Add new services
+    final createBatch = _db.batch();
+    int index = 0;
     for (var service in services) {
       final docRef = _db.collection('services').doc(); // Auto-ID
-      batch.set(docRef, {
+      createBatch.set(docRef, {
         'name': service.name,
         'price': service.price,
         'durationMinutes': service.durationMinutes,
         'imageUrl': service.imageUrl,
-        'description': 'Serviço profissional', // Default
+        'description': 'Serviço profissional',
+        'orderIndex': index++,
       });
     }
-    await batch.commit();
+    await createBatch.commit();
   }
 
   // Add Service
   Future<void> addService(Map<String, dynamic> data) async {
+    // Basic implementation: adds to end (or 999 if lazy)
+    // Ideally query max index first, but for now fixed high number or 0
+    // Better: let's query count
+    final snapshot = await _db.collection('services').count().get();
+    data['orderIndex'] = snapshot.count;
     await _db.collection('services').add(data);
   }
 
@@ -60,6 +80,16 @@ class FirestoreService {
   // Delete Service
   Future<void> deleteService(String id) async {
     await _db.collection('services').doc(id).delete();
+  }
+
+  // Update Service Order
+  Future<void> updateServicesOrder(List<Map<String, dynamic>> services) async {
+    final batch = _db.batch();
+    for (int i = 0; i < services.length; i++) {
+      final docRef = _db.collection('services').doc(services[i]['id']);
+      batch.update(docRef, {'orderIndex': i});
+    }
+    await batch.commit();
   }
 
   // --- End Services Management ---
@@ -169,7 +199,6 @@ class FirestoreService {
     return _db
         .collection('notifications')
         .where('userId', isEqualTo: userId)
-        .orderBy('timestamp', descending: true)
         .snapshots()
         .map(
           (snapshot) => snapshot.docs
@@ -191,6 +220,11 @@ class FirestoreService {
         .where('read', isEqualTo: false)
         .snapshots()
         .map((snapshot) => snapshot.docs.length);
+  }
+
+  // Delete Notification
+  Future<void> deleteNotification(String id) async {
+    await _db.collection('notifications').doc(id).delete();
   }
 
   // Get Booked Appointments for a Date
@@ -240,5 +274,95 @@ class FirestoreService {
           .map((doc) => (doc.data()['dateTime'] as Timestamp).toDate())
           .toList();
     });
+  }
+  // --- Reservations ---
+
+  // Create Reservation
+  Future<void> createReservation(String userId, String userName,
+      List<Map<String, dynamic>> items, double totalPrice) async {
+    await _db.collection('reservations').add({
+      'userId': userId,
+      'userName': userName,
+      'items': items,
+      'totalPrice': totalPrice,
+      'status': 'pending', // pending, completed, cancelled
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+
+    // Optional: Add notification for Admin?
+  }
+
+  // Stream Reservations (optionally filtered by status)
+  Stream<List<Map<String, dynamic>>> getReservationsStream({String? status}) {
+    Query query =
+        _db.collection('reservations').orderBy('timestamp', descending: true);
+
+    if (status != null) {
+      query = query.where('status', isEqualTo: status);
+    }
+
+    return query.snapshots().map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+        return data;
+      }).toList();
+    });
+  }
+
+  // Stream My Reservations (User)
+  Stream<List<Map<String, dynamic>>> getMyReservationsStream(String userId) {
+    return _db
+        .collection('reservations')
+        .where('userId', isEqualTo: userId)
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+        return data;
+      }).toList();
+    });
+  }
+
+  // Complete Reservation (Transaction: Update Status + Decrement Stock)
+  Future<void> completeReservation(
+      String reservationId, List<dynamic> items) async {
+    return _db.runTransaction((transaction) async {
+      // 1. Get current reservation state to ensure it exists
+      final reservationRef = _db.collection('reservations').doc(reservationId);
+      final reservationSnapshot = await transaction.get(reservationRef);
+
+      if (!reservationSnapshot.exists) {
+        throw Exception("Reservation does not exist!");
+      }
+
+      // 2. Decrement Stock for each item
+      for (var item in items) {
+        final productId = item['productId'];
+        final quantity = item['quantity'] as int;
+
+        final productRef = _db.collection('products').doc(productId);
+        final productSnapshot = await transaction.get(productRef);
+
+        if (productSnapshot.exists) {
+          final currentStock = productSnapshot.data()?['stock'] as int? ?? 0;
+          final newStock = currentStock - quantity;
+          transaction.update(productRef, {'stock': newStock});
+        }
+      }
+
+      // 3. Update Reservation Status
+      transaction.update(reservationRef, {'status': 'completed'});
+    });
+  }
+
+  // Cancel Reservation
+  Future<void> cancelReservation(String reservationId) async {
+    await _db
+        .collection('reservations')
+        .doc(reservationId)
+        .update({'status': 'cancelled'});
   }
 }

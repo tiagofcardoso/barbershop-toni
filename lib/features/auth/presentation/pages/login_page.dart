@@ -326,7 +326,7 @@ class _LoginPageState extends State<LoginPage> {
                                 _fullPhoneNumber = phone.completeNumber;
                               },
                               onCountryChanged: (country) {
-                                print('Country changed to: ' + country.name);
+                                // debugPrint('Country changed to: ' + country.name);
                               },
                             ),
                             const Gap(24),

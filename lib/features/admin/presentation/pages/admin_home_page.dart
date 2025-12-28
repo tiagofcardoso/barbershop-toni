@@ -1,6 +1,7 @@
 import 'package:barbershop/features/admin/presentation/pages/admin_appointments_page.dart';
 import 'package:barbershop/features/admin/presentation/pages/admin_services_page.dart';
 import 'package:barbershop/features/admin/presentation/pages/admin_products_page.dart';
+import 'package:barbershop/features/admin/presentation/pages/admin_reservations_page.dart';
 import 'package:barbershop/features/admin/presentation/pages/admin_settings_page.dart';
 import 'package:barbershop/features/auth/presentation/pages/login_page.dart';
 import 'package:barbershop/features/home/data/mock_data.dart';
@@ -21,12 +22,15 @@ class _AdminHomePageState extends State<AdminHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Painel Administrativo'),
+        title: const Text('Painel Administrativo',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        centerTitle: true,
         backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
+        iconTheme: const IconThemeData(color: Colors.white),
+        actionsIconTheme: const IconThemeData(color: Colors.white),
         actions: [
           IconButton(
-            icon: const Icon(Icons.cloud_upload),
+            icon: const Icon(Icons.cloud_upload, color: Colors.white),
             tooltip: 'Migrar Serviços',
             onPressed: () async {
               await FirestoreService().seedServices(MockData.services);
@@ -37,7 +41,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
             },
           ),
           IconButton(
-            icon: const Icon(Icons.logout),
+            icon: const Icon(Icons.logout, color: Colors.white),
             onPressed: () async {
               await AuthService().signOut();
               if (context.mounted) {
@@ -152,6 +156,17 @@ class _AdminHomePageState extends State<AdminHomePage> {
                               context,
                               MaterialPageRoute(
                                   builder: (_) => const AdminProductsPage()));
+                        }),
+                    _buildMenuCard(
+                        icon: Icons.shopping_bag_rounded,
+                        title: 'Reservas',
+                        color: Colors.orange,
+                        onTap: () {
+                          Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) =>
+                                      const AdminReservationsPage()));
                         }),
                     _buildMenuCard(
                         icon: Icons.store_rounded,

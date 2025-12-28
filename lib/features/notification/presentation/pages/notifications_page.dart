@@ -1,5 +1,6 @@
 import 'package:barbershop/features/auth/data/auth_service.dart';
 import 'package:barbershop/shared/services/firestore_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
@@ -26,11 +27,33 @@ class NotificationsPage extends StatelessWidget {
       body: StreamBuilder<List<Map<String, dynamic>>>(
           stream: FirestoreService().getUserNotificationsStream(userId),
           builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Text(
+                    'Erro ao carregar notificações: ${snapshot.error}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ),
+              );
+            }
+
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
 
             final notifications = snapshot.data ?? [];
+
+            // Sort client-side to avoid Firestore Index requirement
+            notifications.sort((a, b) {
+              final tA =
+                  (a['timestamp'] as Timestamp?)?.toDate() ?? DateTime(0);
+              final tB =
+                  (b['timestamp'] as Timestamp?)?.toDate() ?? DateTime(0);
+              return tB.compareTo(tA); // Descending
+            });
 
             if (notifications.isEmpty) {
               return Center(
@@ -98,26 +121,48 @@ class NotificationsPage extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  title,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                    color: read
-                                        ? Colors.black87
-                                        : Colors.blue[900],
-                                  ),
-                                ),
-                                if (timestamp != null)
-                                  Text(
-                                    DateFormat('dd/MM HH:mm').format(timestamp),
+                                Expanded(
+                                  child: Text(
+                                    title,
                                     style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey[500],
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                      color: read
+                                          ? Colors.black87
+                                          : Colors.blue[900],
                                     ),
                                   ),
+                                ),
+                                const Gap(8),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    if (timestamp != null)
+                                      Text(
+                                        DateFormat('dd/MM HH:mm')
+                                            .format(timestamp),
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.grey[500],
+                                        ),
+                                      ),
+                                    const Gap(4),
+                                    GestureDetector(
+                                      onTap: () async {
+                                        await FirestoreService()
+                                            .deleteNotification(id);
+                                        // No need for setState, stream updates automatically
+                                      },
+                                      child: Icon(
+                                        Icons.close,
+                                        size: 16,
+                                        color: Colors.grey[400],
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ],
                             ),
                             const Gap(4),

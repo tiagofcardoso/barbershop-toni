@@ -37,7 +37,7 @@ void main() async {
     try {
       await PushNotificationService().initialize();
     } catch (e) {
-      print('Failed to initialize Push Notifications: $e');
+      debugPrint('Failed to initialize Push Notifications: $e');
     }
   }
 

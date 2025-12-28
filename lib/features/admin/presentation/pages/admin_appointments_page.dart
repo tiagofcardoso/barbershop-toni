@@ -13,12 +13,20 @@ class AdminAppointmentsPage extends StatefulWidget {
 class _AdminAppointmentsPageState extends State<AdminAppointmentsPage> {
   void _updateStatus(String id, String newStatus, String customerId) async {
     await FirestoreService().updateAppointment(id, {'status': newStatus});
+
     // Send Notification
-    await FirestoreService().addNotification(
-      customerId,
-      'Agendamento $newStatus',
-      'Seu agendamento foi $newStatus pelo barbearia.',
-    );
+    String title = 'Atualização de Agendamento';
+    String message = 'Status atualizado para $newStatus';
+
+    if (newStatus == 'Cancelado') {
+      title = 'Agendamento Cancelado';
+      message = 'Infelizmente seu agendamento foi cancelado.';
+    } else if (newStatus == 'Confirmado') {
+      title = 'Agendamento Confirmado';
+      message = 'Seu agendamento foi confirmado! Te esperamos lá.';
+    }
+
+    await FirestoreService().addNotification(customerId, title, message);
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -78,9 +86,10 @@ class _AdminAppointmentsPageState extends State<AdminAppointmentsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Gerenciar Agendamentos'),
+        title: const Text('Gerenciar Agendamentos',
+            style: TextStyle(color: Colors.white)),
         backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Center(
         child: ConstrainedBox(
@@ -219,17 +228,65 @@ class _AdminAppointmentsPageState extends State<AdminAppointmentsPage> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.end,
                               children: [
+                                // Delete Button (New)
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline,
+                                      color: Colors.grey),
+                                  tooltip: 'Excluir permanentemente',
+                                  onPressed: () async {
+                                    final confirm = await showDialog<bool>(
+                                      context: context,
+                                      builder: (context) => AlertDialog(
+                                        title:
+                                            const Text('Excluir Agendamento?'),
+                                        content: const Text(
+                                            'Esta ação não pode ser desfeita.'),
+                                        actions: [
+                                          TextButton(
+                                              onPressed: () =>
+                                                  Navigator.pop(context, false),
+                                              child: const Text('Cancelar')),
+                                          TextButton(
+                                            onPressed: () =>
+                                                Navigator.pop(context, true),
+                                            child: const Text('Excluir',
+                                                style: TextStyle(
+                                                    color: Colors.red)),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+
+                                    if (confirm == true) {
+                                      await FirestoreService()
+                                          .deleteAppointment(id);
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(const SnackBar(
+                                                content: Text(
+                                                    'Agendamento excluído.')));
+                                      }
+                                    }
+                                  },
+                                ),
+                                const Gap(8),
                                 if (status != 'Cancelado')
                                   TextButton(
-                                    onPressed: () => _updateStatus(
-                                        id, 'Cancelado', customerId),
+                                    onPressed: () {
+                                      _updateStatus(
+                                          id, 'Cancelado', customerId);
+                                      // Notification is handled in _updateStatus
+                                    },
                                     child: const Text('Cancelar',
                                         style: TextStyle(color: Colors.red)),
                                   ),
                                 if (status != 'Confirmado')
                                   ElevatedButton(
-                                    onPressed: () => _updateStatus(
-                                        id, 'Confirmado', customerId),
+                                    onPressed: () {
+                                      _updateStatus(
+                                          id, 'Confirmado', customerId);
+                                      // Notification is handled in _updateStatus
+                                    },
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.green,
                                       foregroundColor: Colors.white,

@@ -6,6 +6,23 @@ class ProductCard extends StatelessWidget {
   final ProductModel product;
   final VoidCallback onTap;
 
+  // List of valid local assets to prevent 404 errors
+  static final Set<String> _validAssets = {
+    'assets/images/acabamento.png',
+    'assets/images/barba.png',
+    'assets/images/barba_cabelo_lavagem.png',
+    'assets/images/barba_e_cabelo.png',
+    'assets/images/combo.jpg',
+    'assets/images/corte_classico.png',
+    'assets/images/corte_crianca.png',
+    'assets/images/corte_degrade.png',
+    'assets/images/corte_degrade_maquina.png',
+    'assets/images/depilacao_nariz.png',
+  };
+
+  bool _isNetworkImage(String url) => url.startsWith('http');
+  bool _isValidAsset(String url) => _validAssets.contains(url);
+
   const ProductCard({
     super.key,
     required this.product,
@@ -36,22 +53,36 @@ class ProductCard extends StatelessWidget {
               child: ClipRRect(
                 borderRadius:
                     const BorderRadius.vertical(top: Radius.circular(16)),
-                child: product.imageUrl.startsWith('http')
+                child: _isNetworkImage(product.imageUrl)
                     ? Image.network(
-                        product.imageUrl,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                      )
-                    : Image.asset(
                         product.imageUrl,
                         width: double.infinity,
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) => Container(
                           color: Colors.grey[200],
-                          child: const Icon(Icons.image_not_supported,
+                          child: const Icon(Icons.broken_image,
                               color: Colors.grey),
                         ),
-                      ),
+                      )
+                    : (_isValidAsset(product.imageUrl)
+                        ? Image.asset(
+                            product.imageUrl,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                Container(
+                              color: Colors.grey[200],
+                              child: const Icon(Icons.image_not_supported,
+                                  color: Colors.grey),
+                            ),
+                          )
+                        : Container(
+                            width: double.infinity,
+                            color: Colors.grey[200],
+                            child: const Icon(Icons.image_not_supported,
+                                color:
+                                    Colors.grey), // Fallback for missing assets
+                          )),
               ),
             ),
             // Details

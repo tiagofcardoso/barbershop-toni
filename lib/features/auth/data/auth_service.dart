@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 class AuthService {
@@ -35,7 +36,7 @@ class AuthService {
       // Sign in to Firebase with the Google user credentials
       return await _auth.signInWithCredential(credential);
     } catch (e) {
-      print('Error signing in with Google: $e');
+      debugPrint('Error signing in with Google: $e');
       return null;
     }
   }
@@ -78,7 +79,7 @@ class AuthService {
       );
       return await _auth.signInWithCredential(credential);
     } catch (e) {
-      print('Error signing in with OTP: $e');
+      debugPrint('Error signing in with OTP: $e');
       rethrow;
     }
   }
@@ -88,14 +89,18 @@ class AuthService {
     try {
       return await _auth.signInAnonymously();
     } catch (e) {
-      print('Error signing in anonymously: $e');
+      debugPrint('Error signing in anonymously: $e');
       return null;
     }
   }
 
   // Sign Out
   Future<void> signOut() async {
-    await _googleSignIn.signOut();
+    try {
+      await _googleSignIn.signOut();
+    } catch (e) {
+      debugPrint('Error signing out of Google: $e');
+    }
     await _auth.signOut();
   }
 }
