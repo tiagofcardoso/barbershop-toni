@@ -12,8 +12,13 @@ class AdminSettingsPage extends StatefulWidget {
 class _AdminSettingsPageState extends State<AdminSettingsPage> {
   final _openController = TextEditingController(text: '09:00');
   final _closeController = TextEditingController(text: '19:00');
+  final _lunchStartController = TextEditingController(text: '13:00');
+  final _lunchEndController = TextEditingController(text: '14:00');
+
   final _saturdayOpenController = TextEditingController(text: '09:00');
   final _saturdayCloseController = TextEditingController(text: '18:00');
+  final _saturdayLunchStartController = TextEditingController(text: '13:00');
+  final _saturdayLunchEndController = TextEditingController(text: '14:00');
 
   bool _isLoading = false;
 
@@ -29,8 +34,15 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
     if (settings != null) {
       _openController.text = settings['weekdayOpen'] ?? '09:00';
       _closeController.text = settings['weekdayClose'] ?? '19:00';
+      _lunchStartController.text = settings['weekdayLunchStart'] ?? '13:00';
+      _lunchEndController.text = settings['weekdayLunchEnd'] ?? '14:00';
+
       _saturdayOpenController.text = settings['saturdayOpen'] ?? '09:00';
       _saturdayCloseController.text = settings['saturdayClose'] ?? '18:00';
+      _saturdayLunchStartController.text =
+          settings['saturdayLunchStart'] ?? '13:00';
+      _saturdayLunchEndController.text =
+          settings['saturdayLunchEnd'] ?? '14:00';
     }
     setState(() => _isLoading = false);
   }
@@ -40,8 +52,12 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
     await FirestoreService().saveBusinessSettings({
       'weekdayOpen': _openController.text,
       'weekdayClose': _closeController.text,
+      'weekdayLunchStart': _lunchStartController.text,
+      'weekdayLunchEnd': _lunchEndController.text,
       'saturdayOpen': _saturdayOpenController.text,
       'saturdayClose': _saturdayCloseController.text,
+      'saturdayLunchStart': _saturdayLunchStartController.text,
+      'saturdayLunchEnd': _saturdayLunchEndController.text,
     });
     setState(() => _isLoading = false);
     if (mounted) {
@@ -65,7 +81,7 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
           : Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 600),
-                child: Padding(
+                child: SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -89,6 +105,26 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
                               controller: _closeController,
                               decoration: const InputDecoration(
                                   labelText: 'Fechamento (HH:mm)'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Gap(12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: _lunchStartController,
+                              decoration: const InputDecoration(
+                                  labelText: 'Início Almoço'),
+                            ),
+                          ),
+                          const Gap(16),
+                          Expanded(
+                            child: TextFormField(
+                              controller: _lunchEndController,
+                              decoration: const InputDecoration(
+                                  labelText: 'Fim Almoço'),
                             ),
                           ),
                         ],
@@ -117,7 +153,27 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
                           ),
                         ],
                       ),
-                      const Spacer(),
+                      const Gap(12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: _saturdayLunchStartController,
+                              decoration: const InputDecoration(
+                                  labelText: 'Início Almoço'),
+                            ),
+                          ),
+                          const Gap(16),
+                          Expanded(
+                            child: TextFormField(
+                              controller: _saturdayLunchEndController,
+                              decoration: const InputDecoration(
+                                  labelText: 'Fim Almoço'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Gap(32),
                       SizedBox(
                         width: double.infinity,
                         height: 50,

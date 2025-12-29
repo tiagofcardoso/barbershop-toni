@@ -3,6 +3,7 @@ import 'package:barbershop/features/admin/presentation/pages/admin_services_page
 import 'package:barbershop/features/admin/presentation/pages/admin_products_page.dart';
 import 'package:barbershop/features/admin/presentation/pages/admin_reservations_page.dart';
 import 'package:barbershop/features/admin/presentation/pages/admin_settings_page.dart';
+import 'package:barbershop/features/admin/presentation/pages/admin_professionals_page.dart';
 import 'package:barbershop/features/auth/presentation/pages/login_page.dart';
 import 'package:barbershop/features/home/data/mock_data.dart';
 import 'package:barbershop/shared/services/firestore_service.dart';
@@ -123,13 +124,12 @@ class _AdminHomePageState extends State<AdminHomePage> {
                     crossAxisCount: 2,
                     crossAxisSpacing: 16,
                     mainAxisSpacing: 16,
-                    childAspectRatio: 1.1,
+                    childAspectRatio: 0.9, // Taller cards for images
                   ),
                   children: [
                     _buildMenuCard(
-                        icon: Icons.calendar_month_rounded,
+                        imagePath: 'assets/images/admin_calendar.png',
                         title: 'Agendamentos',
-                        color: Colors.blue,
                         onTap: () {
                           Navigator.push(
                               context,
@@ -138,9 +138,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                       const AdminAppointmentsPage()));
                         }),
                     _buildMenuCard(
-                        icon: Icons.content_cut_rounded,
+                        imagePath: 'assets/images/admin_services.png',
                         title: 'Serviços',
-                        color: Colors.purple,
                         onTap: () {
                           Navigator.push(
                               context,
@@ -148,9 +147,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                   builder: (_) => const AdminServicesPage()));
                         }),
                     _buildMenuCard(
-                        icon: Icons.inventory_2_rounded,
+                        imagePath: 'assets/images/admin_products.png',
                         title: 'Produtos',
-                        color: Colors.green,
                         onTap: () {
                           Navigator.push(
                               context,
@@ -158,9 +156,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                   builder: (_) => const AdminProductsPage()));
                         }),
                     _buildMenuCard(
-                        icon: Icons.shopping_bag_rounded,
+                        imagePath: 'assets/images/admin_reservations.png',
                         title: 'Reservas',
-                        color: Colors.orange,
                         onTap: () {
                           Navigator.push(
                               context,
@@ -169,14 +166,23 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                       const AdminReservationsPage()));
                         }),
                     _buildMenuCard(
-                        icon: Icons.store_rounded,
+                        imagePath: 'assets/images/admin_settings.png',
                         title: 'Configurações',
-                        color: Colors.grey,
                         onTap: () {
                           Navigator.push(
                               context,
                               MaterialPageRoute(
                                   builder: (_) => const AdminSettingsPage()));
+                        }),
+                    _buildMenuCard(
+                        imagePath: 'assets/images/admin_team.png',
+                        title: 'Equipe',
+                        onTap: () {
+                          Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) =>
+                                      const AdminProfessionalsPage()));
                         }),
                   ],
                 ),
@@ -201,39 +207,90 @@ class _AdminHomePageState extends State<AdminHomePage> {
   }
 
   Widget _buildMenuCard(
-      {required IconData icon,
+      {required String imagePath,
       required String title,
-      required Color color,
       required VoidCallback onTap}) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.grey.withOpacity(0.1),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              )
-            ]),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: color, size: 32),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 15,
+              offset: const Offset(0, 8),
             ),
-            const Gap(12),
-            Text(title,
-                style:
-                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: Stack(
+            children: [
+              // 1. Full Background Image
+              Positioned.fill(
+                child: Image.asset(
+                  imagePath,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      color: Colors.grey[200],
+                      child: const Center(
+                          child: Icon(Icons.broken_image, color: Colors.grey)),
+                    );
+                  },
+                ),
+              ),
+
+              // 2. Gradient Overlay for Text Readability
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.black.withOpacity(0.0),
+                        Colors.black.withOpacity(0.6),
+                      ],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                  ),
+                ),
+              ),
+
+              // 3. Title at Bottom
+              Positioned(
+                bottom: 16,
+                left: 16,
+                right: 16,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: Colors.white,
+                          shadows: [
+                            Shadow(
+                              color: Colors.black45,
+                              blurRadius: 4,
+                              offset: Offset(0, 2),
+                            )
+                          ]),
+                    ),
+                    const Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      size: 14,
+                      color: Colors.white70,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

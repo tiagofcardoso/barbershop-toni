@@ -398,4 +398,31 @@ class FirestoreService {
         .doc(reservationId)
         .update({'status': 'cancelled'});
   }
+
+  // --- Professionals Management ---
+  Stream<List<Map<String, dynamic>>> getProfessionalsStream() {
+    return _db
+        .collection('professionals')
+        .orderBy('orderIndex')
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs
+              .map((doc) => {...doc.data(), 'id': doc.id})
+              .toList(),
+        );
+  }
+
+  Future<void> addProfessional(Map<String, dynamic> data) async {
+    final snapshot = await _db.collection('professionals').count().get();
+    data['orderIndex'] = snapshot.count;
+    await _db.collection('professionals').add(data);
+  }
+
+  Future<void> updateProfessional(String id, Map<String, dynamic> data) async {
+    await _db.collection('professionals').doc(id).update(data);
+  }
+
+  Future<void> deleteProfessional(String id) async {
+    await _db.collection('professionals').doc(id).delete();
+  }
 }

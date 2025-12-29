@@ -8,8 +8,15 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class BookingPage extends StatefulWidget {
   final ServiceModel service;
+  final String? professionalId;
+  final String? professionalName;
 
-  const BookingPage({super.key, required this.service});
+  const BookingPage({
+    super.key,
+    required this.service,
+    this.professionalId,
+    this.professionalName,
+  });
 
   @override
   State<BookingPage> createState() => _BookingPageState();
@@ -19,20 +26,32 @@ class _BookingPageState extends State<BookingPage> {
   late List<DateTime> _dates;
   late DateTime _selectedDate;
   String? _selectedTime;
+  Map<String, dynamic>? _businessSettings;
+  bool _isLoadingSettings = true;
 
   @override
   void initState() {
     super.initState();
     _generateDates();
-    // Default to the first available date
-    try {
-      _selectedDate = _dates.firstWhere((date) => _isDayAvailable(date));
-    } catch (e) {
-      if (_dates.isNotEmpty) {
-        _selectedDate = _dates.first;
-      } else {
-        _selectedDate = DateTime.now();
-      }
+    _loadSettingsAndDefaults();
+  }
+
+  Future<void> _loadSettingsAndDefaults() async {
+    _businessSettings = await FirestoreService().getBusinessSettings();
+    if (mounted) {
+      setState(() {
+        _isLoadingSettings = false;
+        // Default to the first available date
+        try {
+          _selectedDate = _dates.firstWhere((date) => _isDayAvailable(date));
+        } catch (e) {
+          if (_dates.isNotEmpty) {
+            _selectedDate = _dates.first;
+          } else {
+            _selectedDate = DateTime.now();
+          }
+        }
+      });
     }
   }
 
@@ -73,94 +92,132 @@ class _BookingPageState extends State<BookingPage> {
     return holidays.containsKey(key);
   }
 
-  /// Calculates the duration of the service for a specific start time.
-  /// Handles the rule: "a primeira marcação da parte da tarde durante a semana, seria de 45 min"
-  /// Implies adding 15 min padding/duration to the first afternoon slot on weekdays.
-  int _getServiceDuration(String startTime, bool isWeekday) {
-    int baseDuration = widget.service.durationMinutes;
-
-    // Special rule for 15:15 slot on Weekdays
-    if (isWeekday && startTime == '15:15') {
-      // "já cabelo e barba seria 1h 15min total". Normal is 60. So +15.
-      // "mesmo que somente cabelo" (Normal 45). "seria de 45".
-      // If standard haircut is 45, and user says "seria de 45", then no change?
-      // But context implies a change. "logo... seria de 45".
-      // Maybe standard haircut is 30? In mock_data, `Corte Degradê` is 45.
-      // Let's assume +15 mins for ANY service at 15:15 to be safe/consistent with logic.
-      // (Or maybe User means "Min duration is 45"?).
-      // Given "já cabelo e barba seria 1h 15min" (Normal 60 -> 75), it's definitely +15.
-      return baseDuration + 15;
-    }
-
-    return baseDuration;
+  // Helper to parse HH:mm
+  TimeOfDay _parseTime(String timeStr) {
+    final parts = timeStr.split(':');
+    return TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
   }
 
-  /// Generates available time slots based on the selected date and service rules.
+  // Helper to format TimeOfDay to HH:mm
+  String _formatTime(TimeOfDay time) {
+    final h = time.hour.toString().padLeft(2, '0');
+    final m = time.minute.toString().padLeft(2, '0');
+    return '$h:$m';
+  }
+
+  // Convert TimeOfDay to minutes from midnight
+  int _timeToMinutes(TimeOfDay time) {
+    return time.hour * 60 + time.minute;
+  }
+
   List<String> _generateCandidateSlots(DateTime date) {
     final isSaturday = date.weekday == DateTime.saturday;
-    final isWeekday =
-        !isSaturday; // and not Sun/Mon because of _isDayAvailable check
+    final isWeekday = !isSaturday;
+
+    String openStr = '09:00';
+    String closeStr = '19:00';
+    String lunchStartStr = '13:00';
+    String lunchEndStr = '14:00';
+
+    if (_businessSettings != null) {
+      if (isWeekday) {
+        openStr = _businessSettings!['weekdayOpen'] ?? '09:00';
+        closeStr = _businessSettings!['weekdayClose'] ?? '19:00';
+        lunchStartStr = _businessSettings!['weekdayLunchStart'] ?? '13:00';
+        lunchEndStr = _businessSettings!['weekdayLunchEnd'] ?? '14:00';
+      } else {
+        openStr = _businessSettings!['saturdayOpen'] ?? '09:00';
+        closeStr = _businessSettings!['saturdayClose'] ?? '18:00';
+        lunchStartStr = _businessSettings!['saturdayLunchStart'] ?? '13:00';
+        lunchEndStr = _businessSettings!['saturdayLunchEnd'] ?? '14:00';
+      }
+    } else {
+      // Fallbacks if settings not loaded
+      if (isSaturday) {
+        closeStr = '18:00';
+      }
+    }
+
+    TimeOfDay openTime = _parseTime(openStr);
+    TimeOfDay closeTime = _parseTime(closeStr);
+    TimeOfDay lunchStart = _parseTime(lunchStartStr);
+    TimeOfDay lunchEnd = _parseTime(lunchEndStr);
 
     List<String> slots = [];
 
-    // --- Morning Slots (Common) ---
-    // 09:00 to 12:30 (intervals of 30 min)
-    // 09:00, 09:30, 10:00, 10:30, 11:00, 11:30, 12:00, 12:30
-    var morning = [
-      '09:00',
-      '09:30',
-      '10:00',
-      '10:30',
-      '11:00',
-      '11:30',
-      '12:00',
-      '12:30'
-    ];
-    slots.addAll(morning);
+    // Loop from Open to Close
+    int currentMinutes = _timeToMinutes(openTime);
+    int closeMinutes = _timeToMinutes(closeTime);
+    int lunchStartMinutes = _timeToMinutes(lunchStart);
+    int lunchEndMinutes = _timeToMinutes(lunchEnd);
+    int stepMinutes = widget.service.durationMinutes;
 
-    // --- Afternoon Slots ---
-    if (isWeekday) {
-      // Lunch 13:00 - 15:15.
-      // First slot: 15:15.
-      slots.add('15:15');
-      // Subsequent slots: 16:00, 16:30, 17:00 ... 18:30.
-      // 15:15 + 45m = 16:00.
-      var afternoon = ['16:00', '16:30', '17:00', '17:30', '18:00', '18:30'];
-      slots.addAll(afternoon);
-    } else {
-      // Saturday
-      // Lunch 13:00 - 15:00. (Assuming lunch ends 15:00 based on "Sábado das 13 às 15h")
-      // First slot: 15:00.
-      // Closes 18:00.
-      // Slots: 15:00, 15:30, 16:00, 16:30, 17:00, 17:30.
-      var afternoonSat = ['15:00', '15:30', '16:00', '16:30', '17:00', '17:30'];
-      slots.addAll(afternoonSat);
+    // Safety check for invalid step
+    if (stepMinutes < 15) stepMinutes = 30;
+
+    while (currentMinutes + stepMinutes <= closeMinutes) {
+      int endMinutes = currentMinutes + stepMinutes;
+
+      // SPECIAL RULE: First Afternoon Slot (Weekday only)
+      // "a primeira marcação da parte da tarde durante a semana, seria de 45 min..."
+      // Logic: If currentMinutes == lunchEndMinutes (14:00), we add 15 minutes to the step.
+      // This shifts the START of the next slot.
+      int effectiveStep = stepMinutes;
+      if (isWeekday && currentMinutes == lunchEndMinutes) {
+        effectiveStep += 15;
+        endMinutes = currentMinutes + effectiveStep;
+      }
+
+      bool overlapsLunch = false;
+
+      // Strict Lunch Overlap Rule:
+      if (currentMinutes < lunchEndMinutes && endMinutes > lunchStartMinutes) {
+        overlapsLunch = true;
+      }
+
+      if (!overlapsLunch) {
+        int h = currentMinutes ~/ 60;
+        int m = currentMinutes % 60;
+        slots.add(_formatTime(TimeOfDay(hour: h, minute: m)));
+
+        currentMinutes += effectiveStep;
+      } else {
+        // If we hit lunch, jump to lunch end
+        if (currentMinutes < lunchEndMinutes) {
+          currentMinutes = lunchEndMinutes;
+        } else {
+          currentMinutes += stepMinutes; // Safe fallback
+        }
+      }
     }
 
     return slots;
   }
 
   Stream<List<String>> _getAvailableSlotsStream(DateTime date) {
+    if (_isLoadingSettings) {
+      return Stream.value([]);
+    }
+
     return FirestoreService()
         .getBookedAppointmentsOnDate(date)
         .map((bookedDocs) {
       List<Map<String, dynamic>> bookings = [];
       for (var doc in bookedDocs) {
+        // Filter by Professional
+        if (widget.professionalId != null) {
+          final bookingProId = doc['professionalId'];
+          // If the booking is for another professional, it doesn't block me
+          if (bookingProId != null && bookingProId != widget.professionalId) {
+            continue;
+          }
+        }
+
         final start = (doc['dateTime'] as Timestamp).toDate();
         int duration = doc['durationMinutes'] ?? 0;
 
         if (duration == 0) {
-          // Fallback: try to find service in MockData
-          final serviceName = doc['serviceName'] as String?;
-          if (serviceName != null) {
-            final mockService = MockData.services.firstWhere(
-                (s) => s.name == serviceName,
-                orElse: () => MockData.services.first // Fallback
-                );
-            duration = mockService.durationMinutes;
-          } else {
-            duration = 30; // Default fallback
-          }
+          duration = 30; // Fallback
         }
         bookings.add({
           'start': start,
@@ -168,12 +225,9 @@ class _BookingPageState extends State<BookingPage> {
         });
       }
 
-      // 2. Generate Candidate Slots
+      // 2. Generate Candidate Slots (Dynamic)
       List<String> candidates = _generateCandidateSlots(date);
       List<String> available = [];
-
-      final isSaturday = date.weekday == DateTime.saturday;
-      final isWeekday = !isSaturday;
 
       // 3. Filter Candidates
       for (var timeStr in candidates) {
@@ -181,56 +235,10 @@ class _BookingPageState extends State<BookingPage> {
         final startDateTime = DateTime(date.year, date.month, date.day,
             int.parse(timeParts[0]), int.parse(timeParts[1]));
 
-        int effectiveDuration = _getServiceDuration(timeStr, isWeekday);
-        final endDateTime =
-            startDateTime.add(Duration(minutes: effectiveDuration));
+        final endDateTime = startDateTime
+            .add(Duration(minutes: widget.service.durationMinutes));
 
-        // Rule: "última marcação somente cabelo de manhã, 12:30… já cabelo e barba, 12h"
-        // Only applies to morning slots (before 13:00)
-        if (startDateTime.hour < 13) {
-          final isHairAndBeard =
-              widget.service.name.toLowerCase().contains('barba') &&
-                  widget.service.name.toLowerCase().contains('cabelo');
-
-          if (isHairAndBeard) {
-            // Limit 12:00
-            if (startDateTime.hour > 12 ||
-                (startDateTime.hour == 12 && startDateTime.minute > 0)) {
-              continue;
-            }
-          } else {
-            // Limit 12:30 (Hair, Beard alone, etc)
-            if (startDateTime.hour > 12 ||
-                (startDateTime.hour == 12 && startDateTime.minute > 30)) {
-              continue;
-            }
-          }
-        }
-
-        // Rule: Closing Time Logic
-        if (isWeekday) {
-          // Limit 18:30 for Start Time automatically handled by candidate list max 18:30
-        } else {
-          // Saturday
-          final isHairAndBeard =
-              widget.service.name.toLowerCase().contains('barba') &&
-                  widget.service.name.toLowerCase().contains('cabelo');
-          if (isHairAndBeard) {
-            // Max start 17:00
-            if (startDateTime.hour > 17 ||
-                (startDateTime.hour == 17 && startDateTime.minute > 0)) {
-              continue;
-            }
-          } else {
-            // Max start 17:30
-            if (startDateTime.hour > 17 ||
-                (startDateTime.hour == 17 && startDateTime.minute > 30)) {
-              continue;
-            }
-          }
-        }
-
-        // Rule: Collision with Bookmings
+        // Rule: Collision with Bookings
         bool hasCollision = false;
         for (var booking in bookings) {
           final bStart = booking['start'] as DateTime;
@@ -250,6 +258,15 @@ class _BookingPageState extends State<BookingPage> {
 
       return available;
     });
+  }
+
+  // Helper for effective duration (Simplified now: just standard duration)
+  int _getServiceDuration(String startTime, bool isWeekday) {
+    // Dynamic logic request: "se degrade 30, slots de 30... se 60, slots de 60".
+    // We already handled slot GENERATION. This is for SAVING the appointment.
+    // We should respect the service duration.
+    // The previous prompt mentioned "15:15" logic. I am removing it to be fully dynamic as requested.
+    return widget.service.durationMinutes;
   }
 
   @override
@@ -560,14 +577,16 @@ class _BookingPageState extends State<BookingPage> {
                             _getServiceDuration(_selectedTime!, isWeekday);
 
                         await FirestoreService().addAppointment({
-                          'customerId': user.uid,
-                          'customerName': user.displayName ?? 'Cliente',
-                          'serviceName': widget.service.name,
                           'dateTime': dateTime,
-                          'price': widget.service.price,
-                          'durationMinutes':
-                              duration, // Save calculated duration
-                          'status': 'Confirmado',
+                          'serviceName': widget.service.name,
+                          'servicePrice': widget.service.price,
+                          'durationMinutes': duration,
+                          'customerName': user.displayName ?? 'Cliente',
+                          'customerEmail': user.email,
+                          'customerId': user.uid,
+                          'status': 'Confirmado', // Auto-confirm
+                          'professionalId': widget.professionalId,
+                          'professionalName': widget.professionalName,
                         });
 
                         if (context.mounted) {

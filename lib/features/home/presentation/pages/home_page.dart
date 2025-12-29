@@ -1,4 +1,4 @@
-import 'package:barbershop/features/booking/presentation/pages/booking_page.dart';
+import 'package:barbershop/features/booking/presentation/pages/select_professional_page.dart';
 import 'package:barbershop/features/auth/data/auth_service.dart';
 import 'package:barbershop/shared/services/firestore_service.dart';
 import 'package:barbershop/features/notification/presentation/pages/notifications_page.dart';
@@ -142,7 +142,7 @@ class HomePage extends StatelessWidget {
                                 context,
                                 MaterialPageRoute(
                                   builder: (context) =>
-                                      BookingPage(service: service),
+                                      SelectProfessionalPage(service: service),
                                 ),
                               );
                             },
