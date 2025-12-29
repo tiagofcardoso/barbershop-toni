@@ -25,7 +25,25 @@ class AppointmentsPage extends StatelessWidget {
             .getMyAppointmentsStream(AuthService().currentUser?.uid ?? ''),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return Center(child: Text('Erro: ${snapshot.error}'));
+            return Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.red[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red),
+                  ),
+                  child: SelectableText(
+                    // Allow copying the link
+                    'Erro ao carregar agendamentos:\n${snapshot.error}',
+                    style: const TextStyle(color: Colors.red),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+            );
           }
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -64,7 +82,8 @@ class AppointmentsPage extends StatelessWidget {
               final DateTime date =
                   (dateTimeRaw as dynamic).toDate(); // Handle Timestamp
               final String serviceName = appointment['serviceName'];
-              final double price = (appointment['price'] as num).toDouble();
+              final double price =
+                  ((appointment['servicePrice'] ?? 0) as num).toDouble();
               final String status = appointment['status'];
 
               return Container(

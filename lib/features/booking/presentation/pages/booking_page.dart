@@ -595,7 +595,8 @@ class _BookingPageState extends State<BookingPage> {
                                 content: Text(
                                     'Agendamento confirmado para ${DateFormat('dd/MM').format(_selectedDate)} às $_selectedTime!')),
                           );
-                          Navigator.pop(context);
+                          Navigator.of(context)
+                              .popUntil((route) => route.isFirst);
                         }
                       }
                     : null,

@@ -97,6 +97,11 @@ class _AdminAppointmentsPageState extends State<AdminAppointmentsPage> {
           child: StreamBuilder<List<Map<String, dynamic>>>(
             stream: FirestoreService().getAppointmentsStream(),
             builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return Center(
+                    child: Text('Erro ao carregar: ${snapshot.error}'));
+              }
+
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
               }

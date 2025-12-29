@@ -175,9 +175,15 @@ class FirestoreService {
 
   // --- Appointments ---
 
-  // Stream all appointments (for Admin)
+  // Stream all appointments (for Admin) - Optimized: Recent + Future
   Stream<List<Map<String, dynamic>>> getAppointmentsStream() {
-    return _db.collection('appointments').orderBy('dateTime').snapshots().map(
+    final thirtyDaysAgo = DateTime.now().subtract(const Duration(days: 30));
+    return _db
+        .collection('appointments')
+        .where('dateTime', isGreaterThanOrEqualTo: thirtyDaysAgo)
+        .orderBy('dateTime')
+        .snapshots()
+        .map(
           (snapshot) => snapshot.docs
               .map((doc) => {...doc.data(), 'id': doc.id})
               .toList(),

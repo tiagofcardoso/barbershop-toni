@@ -1,0 +1,75 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      // SECURITY NOTICE: 
+      // Ideally use Custom Claims (request.auth.token.admin == true) via Cloud Functions.
+      // For a serverless/free-tier approach, we lock writes to the specific hardcoded email.
+      // This prevents hacked clients from writing to admin collections.
+      return request.auth.token.email == 'admin@barber.com'; 
+    }
+
+    // USER PROFILES
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(userId) || isAdmin();
+    }
+
+    // PROFESSIONALS (Barbers)
+    match /professionals/{professionalId} {
+      allow read: if true; // Public can see barbers
+      allow write: if isAdmin(); // Only Admin can add/edit/delete barbers
+    }
+
+    // APPOINTMENTS
+    match /appointments/{appointmentId} {
+      // Public/User can query appointments (needed for slot availability checks)
+      allow read: if isSignedIn();
+      
+      // Create: User can create if they assign themselves as customer
+      allow create: if isSignedIn() 
+                    && request.resource.data.customerId == request.auth.uid;
+      
+      // Update/Delete: Owner (cancel own) or Admin
+      allow update, delete: if isSignedIn() && 
+                            (resource.data.customerId == request.auth.uid || isAdmin());
+    }
+
+    // BUSINESS SETTINGS
+    match /settings/{document=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // SERVICES & PRODUCTS
+    match /services/{document=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    match /products/{document=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    match /reservations/{document=**} {
+       allow read, write: if isSignedIn(); // Refine later if needed
+    }
+    
+    match /notifications/{document=**} {
+       allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+       allow write: if isAdmin(); // Admin sends notifications (or system)
+    }
+  }
+}
