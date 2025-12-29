@@ -18,26 +18,28 @@ class AuthService {
   // Sign in with Google
   Future<UserCredential?> signInWithGoogle() async {
     try {
-      // Trigger the authentication flow
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      if (kIsWeb) {
+        // Web: Use signInWithPopup (More robust for PWA/Web)
+        return await _auth.signInWithPopup(GoogleAuthProvider());
+      } else {
+        // Mobile: Use GoogleSignIn plugin (Native UX)
+        final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
 
-      if (googleUser == null) return null; // User canceled the sign-in
+        if (googleUser == null) return null; // User canceled the sign-in
 
-      // Obtain the auth details from the request
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
+        final GoogleSignInAuthentication googleAuth =
+            await googleUser.authentication;
 
-      // Create a new credential
-      final OAuthCredential credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
+        final OAuthCredential credential = GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken,
+          idToken: googleAuth.idToken,
+        );
 
-      // Sign in to Firebase with the Google user credentials
-      return await _auth.signInWithCredential(credential);
+        return await _auth.signInWithCredential(credential);
+      }
     } catch (e) {
       debugPrint('Error signing in with Google: $e');
-      return null;
+      rethrow; // Rethrow to show error in UI
     }
   }
 

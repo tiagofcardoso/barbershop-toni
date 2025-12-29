@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instanceFor(
@@ -16,6 +17,38 @@ class FirestoreService {
       'lastLogin': FieldValue.serverTimestamp(),
       'role': user.email == 'admin@barber.com' ? 'admin' : 'client',
     }, SetOptions(merge: true));
+  }
+
+  // Save User Consent (RGPD)
+  Future<void> saveUserConsent(String userId) async {
+    try {
+      await _db.collection('users').doc(userId).set({
+        'termsAccepted': true,
+        'termsAcceptedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('Error saving consent: $e');
+      throw e; // Rethrow to show error in UI
+    }
+  }
+
+  // Get User Data Stream
+  Stream<DocumentSnapshot<Map<String, dynamic>>> getUserStream(String userId) {
+    return _db.collection('users').doc(userId).snapshots();
+  }
+
+  // Get specific user data once
+  Future<DocumentSnapshot<Map<String, dynamic>>> getUserData(String userId) {
+    return _db.collection('users').doc(userId).get();
+  }
+
+  // Update specific user fields
+  Future<void> updateUserFields(
+      String userId, Map<String, dynamic> data) async {
+    await _db
+        .collection('users')
+        .doc(userId)
+        .set(data, SetOptions(merge: true));
   }
 
   // --- Services Management ---

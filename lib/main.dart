@@ -21,6 +21,8 @@ import 'package:barbershop/features/profile/presentation/pages/profile_page.dart
 import 'package:barbershop/features/admin/presentation/pages/admin_home_page.dart';
 import 'package:barbershop/features/splash/presentation/pages/splash_page.dart';
 import 'package:barbershop/features/products/presentation/pages/products_page.dart';
+import 'package:barbershop/features/auth/presentation/pages/gdpr_consent_page.dart';
+import 'package:barbershop/shared/services/firestore_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -83,10 +85,36 @@ class AuthGate extends StatelessWidget {
 
         if (snapshot.hasData) {
           // User is logged in
-          if (snapshot.data!.email == 'admin@barber.com') {
-            return const AdminHomePage();
-          }
-          return const MainScreen();
+          // Check for RGPD Consent first
+          return StreamBuilder<DocumentSnapshot>(
+            stream: FirestoreService().getUserStream(snapshot.data!.uid),
+            builder: (context, userSnapshot) {
+              if (userSnapshot.connectionState == ConnectionState.waiting) {
+                // Show a loading screen while fetching user profile
+                return const Scaffold(
+                    body: Center(child: CircularProgressIndicator()));
+              }
+
+              if (!userSnapshot.hasData || !userSnapshot.data!.exists) {
+                // If user doc doesn't exist, show consent page (it will create/update)
+                return const GDPRConsentPage();
+              }
+
+              final userData =
+                  userSnapshot.data!.data() as Map<String, dynamic>?;
+              final bool termsAccepted = userData?['termsAccepted'] ?? false;
+
+              if (!termsAccepted) {
+                return const GDPRConsentPage();
+              }
+
+              // RGPD Accepted, proceed to App
+              if (snapshot.data!.email == 'admin@barber.com') {
+                return const AdminHomePage();
+              }
+              return const MainScreen();
+            },
+          );
         }
 
         // User is expected to log in
