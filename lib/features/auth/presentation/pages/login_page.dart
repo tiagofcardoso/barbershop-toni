@@ -188,10 +188,63 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  void _signInWithGoogle() async {
+    setState(() => _isLoading = true);
+    try {
+      final userCredential = await AuthService().signInWithGoogle();
+
+      if (userCredential != null && userCredential.user != null) {
+        // Save to Firestore (Creates profile if not exists)
+        await FirestoreService().saveUser(userCredential.user!);
+
+        if (mounted) {
+          // Admin check usually by email, but for Google login we assume Client for now unless specific logic needed
+          if (userCredential.user!.email == 'admin@barber.com') {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => const AdminHomePage()),
+            );
+          } else {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => const MainScreen()),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao entrar com Google: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  bool _showInitialScreen = true;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
+      appBar: !_showInitialScreen
+          ? AppBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              iconTheme: const IconThemeData(color: Colors.black),
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () {
+                  // If in Admin mode, go back to Phone mode, else go to Initial Screen
+                  if (_isAdminLogin) {
+                    setState(() => _isAdminLogin = false);
+                  } else {
+                    setState(() => _showInitialScreen = true);
+                  }
+                },
+              ),
+            )
+          : null,
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -202,14 +255,15 @@ class _LoginPageState extends State<LoginPage> {
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
-                      minHeight: constraints.maxHeight,
+                      minHeight: constraints.maxHeight -
+                          (_showInitialScreen ? 0 : 80), // Adjust for AppBar
                     ),
                     child: IntrinsicHeight(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const Spacer(),
+                          if (_showInitialScreen) const Spacer(),
                           // Logo
                           Center(
                             child: Container(
@@ -246,176 +300,214 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                           const Gap(48),
 
-                          if (_isAdminLogin) ...[
-                            // Admin Login Form
-                            const Text('Acesso Administrativo',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(fontWeight: FontWeight.bold)),
-                            const Gap(24),
-                            TextField(
-                              controller: _emailController,
-                              decoration: InputDecoration(
-                                labelText: 'E-mail',
-                                prefixIcon: const Icon(Icons.email_outlined),
-                                border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12)),
-                              ),
-                            ),
-                            const Gap(16),
-                            TextField(
-                              controller: _passwordController,
-                              decoration: InputDecoration(
-                                labelText: 'Senha',
-                                prefixIcon: const Icon(Icons.lock_outline),
-                                border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12)),
-                              ),
-                              obscureText: true,
-                            ),
-                            const Gap(24),
+                          if (_showInitialScreen) ...[
+                            // --- INITIAL SCREEN (Google Only) ---
                             SizedBox(
                               height: 50,
-                              child: ElevatedButton(
-                                onPressed: _isLoading ? null : _signInAdmin,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.black,
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
+                              child: OutlinedButton.icon(
+                                onPressed:
+                                    _isLoading ? null : _signInWithGoogle,
+                                icon: Image.network(
+                                  'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/1200px-Google_%22G%22_logo.svg.png',
+                                  height: 24,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      const Icon(Icons.g_mobiledata,
+                                          color: Colors.blue, size: 30),
+                                ), // Using Network PNG for compatibility
+                                label: const Text(
+                                  'Continuar com Google',
+                                  style: TextStyle(
+                                    color: Colors.black87,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
                                   ),
                                 ),
-                                child: _isLoading
-                                    ? const CircularProgressIndicator(
-                                        color: Colors.white)
-                                    : const Text('Entrar como Admin',
-                                        style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold)),
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: () =>
-                                  setState(() => _isAdminLogin = false),
-                              child: const Text('Voltar para Login de Cliente'),
-                            ),
-                          ] else if (!_isCodeSent) ...[
-                            // Step 1: Name and Phone Input
-                            TextField(
-                              controller: _nameController,
-                              decoration: InputDecoration(
-                                labelText: 'Seu Nome',
-                                prefixIcon: const Icon(Icons.person_outline),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                                style: OutlinedButton.styleFrom(
+                                  backgroundColor: Colors.white,
+                                  side: const BorderSide(color: Colors.grey),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(
+                                        24), // Google style pill shape
+                                  ),
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 12),
                                 ),
                               ),
-                            ),
-                            const Gap(16),
-                            IntlPhoneField(
-                              controller: _phoneController,
-                              decoration: InputDecoration(
-                                labelText: 'Telefone',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              initialCountryCode:
-                                  'PT', // Default to Portugal as requested logic context implies
-                              languageCode: 'pt',
-                              onChanged: (phone) {
-                                _fullPhoneNumber = phone.completeNumber;
-                              },
-                              onCountryChanged: (country) {
-                                // debugPrint('Country changed to: ' + country.name);
-                              },
                             ),
                             const Gap(24),
-                            SizedBox(
-                              height: 50,
-                              child: ElevatedButton(
-                                onPressed: _isLoading
-                                    ? null
-                                    : () {
-                                        _verifyPhone();
-                                      },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.black,
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                child: _isLoading
-                                    ? const CircularProgressIndicator(
-                                        color: Colors.white)
-                                    : const Text(
-                                        'Receber Código',
-                                        style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold),
-                                      ),
-                              ),
-                            ),
                             TextButton(
                               onPressed: () =>
-                                  setState(() => _isAdminLogin = true),
-                              child: const Text('Sou Admin'),
+                                  setState(() => _showInitialScreen = false),
+                              child: Text('Login com telefone / Admin',
+                                  style: TextStyle(color: Colors.grey[600])),
                             ),
+                            const Spacer(),
                           ] else ...[
-                            // Step 2: OTP Input
-                            Text(
-                              'Enviamos um código para ${_phoneController.text}',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: Colors.grey[600]),
-                            ),
-                            const Gap(24),
-                            TextField(
-                              controller: _otpController,
-                              keyboardType: TextInputType.number,
-                              textAlign: TextAlign.center,
-                              maxLength: 6,
-                              style: const TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 8),
-                              decoration: InputDecoration(
-                                counterText: '',
-                                hintText: '000000',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                            // --- FORM SCREENS (Phone or Admin) ---
+                            if (_isAdminLogin) ...[
+                              // Admin Login Form
+                              const Text('Acesso Administrativo',
+                                  textAlign: TextAlign.center,
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.bold)),
+                              const Gap(24),
+                              TextField(
+                                controller: _emailController,
+                                decoration: InputDecoration(
+                                  labelText: 'E-mail',
+                                  prefixIcon: const Icon(Icons.email_outlined),
+                                  border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12)),
                                 ),
                               ),
-                            ),
-                            const Gap(24),
-                            SizedBox(
-                              height: 50,
-                              child: ElevatedButton(
-                                onPressed: _isLoading ? null : _signInWithOtp,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.black,
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(
+                              const Gap(16),
+                              TextField(
+                                controller: _passwordController,
+                                decoration: InputDecoration(
+                                  labelText: 'Senha',
+                                  prefixIcon: const Icon(Icons.lock_outline),
+                                  border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12)),
+                                ),
+                                obscureText: true,
+                              ),
+                              const Gap(24),
+                              SizedBox(
+                                height: 50,
+                                child: ElevatedButton(
+                                  onPressed: _isLoading ? null : _signInAdmin,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.black,
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  child: _isLoading
+                                      ? const CircularProgressIndicator(
+                                          color: Colors.white)
+                                      : const Text('Entrar como Admin',
+                                          style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold)),
+                                ),
+                              ),
+                            ] else if (!_isCodeSent) ...[
+                              // Step 1: Name and Phone Input
+                              TextField(
+                                controller: _nameController,
+                                decoration: InputDecoration(
+                                  labelText: 'Seu Nome',
+                                  prefixIcon: const Icon(Icons.person_outline),
+                                  border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                 ),
-                                child: _isLoading
-                                    ? const CircularProgressIndicator(
-                                        color: Colors.white)
-                                    : const Text(
-                                        'Entrar',
-                                        style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold),
-                                      ),
                               ),
-                            ),
-                            TextButton(
-                              onPressed: () =>
-                                  setState(() => _isCodeSent = false),
-                              child: const Text('Alterar número'),
-                            ),
+                              const Gap(16),
+                              IntlPhoneField(
+                                controller: _phoneController,
+                                decoration: InputDecoration(
+                                  labelText: 'Telefone',
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                initialCountryCode: 'PT',
+                                languageCode: 'pt',
+                                onChanged: (phone) {
+                                  _fullPhoneNumber = phone.completeNumber;
+                                },
+                              ),
+                              const Gap(24),
+                              SizedBox(
+                                height: 50,
+                                child: ElevatedButton(
+                                  onPressed: _isLoading
+                                      ? null
+                                      : () {
+                                          _verifyPhone();
+                                        },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.black,
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  child: _isLoading
+                                      ? const CircularProgressIndicator(
+                                          color: Colors.white)
+                                      : const Text(
+                                          'Receber Código',
+                                          style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold),
+                                        ),
+                                ),
+                              ),
+                              const Gap(12),
+                              TextButton(
+                                onPressed: () =>
+                                    setState(() => _isAdminLogin = true),
+                                child: const Text('Sou Admin'),
+                              ),
+                            ] else ...[
+                              // Step 2: OTP Input
+                              Text(
+                                'Enviamos um código para ${_phoneController.text}',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Colors.grey[600]),
+                              ),
+                              const Gap(24),
+                              TextField(
+                                controller: _otpController,
+                                keyboardType: TextInputType.number,
+                                textAlign: TextAlign.center,
+                                maxLength: 6,
+                                style: const TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 8),
+                                decoration: InputDecoration(
+                                  counterText: '',
+                                  hintText: '000000',
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
+                              const Gap(24),
+                              SizedBox(
+                                height: 50,
+                                child: ElevatedButton(
+                                  onPressed: _isLoading ? null : _signInWithOtp,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.black,
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  child: _isLoading
+                                      ? const CircularProgressIndicator(
+                                          color: Colors.white)
+                                      : const Text(
+                                          'Entrar',
+                                          style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold),
+                                        ),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () =>
+                                    setState(() => _isCodeSent = false),
+                                child: const Text('Alterar número'),
+                              ),
+                            ],
+                            const Spacer(),
                           ],
-                          const Spacer(),
                         ],
                       ),
                     ),
