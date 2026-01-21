@@ -2,6 +2,7 @@ import 'package:barbershop/shared/services/firestore_service.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
+import 'admin_create_appointment_page.dart';
 
 class AdminAppointmentsPage extends StatefulWidget {
   const AdminAppointmentsPage({super.key});
@@ -198,6 +199,18 @@ class _AdminAppointmentsPageState extends State<AdminAppointmentsPage> {
                                             color: Colors.grey[600],
                                             fontSize: 13),
                                       ),
+                                      Text(
+                                        appointment['customerPhone'] != null
+                                            ? 'Tel: ${appointment['customerPhone']}'
+                                            : 'Sem telefone registrado',
+                                        style: TextStyle(
+                                            color:
+                                                appointment['customerPhone'] !=
+                                                        null
+                                                    ? Colors.grey[600]
+                                                    : Colors.red[300],
+                                            fontSize: 12),
+                                      ),
                                     ],
                                   ),
                                 ),
@@ -312,6 +325,18 @@ class _AdminAppointmentsPageState extends State<AdminAppointmentsPage> {
             },
           ),
         ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const AdminCreateAppointmentPage(),
+            ),
+          );
+        },
+        backgroundColor: Colors.black,
+        child: const Icon(Icons.add, color: Colors.white),
       ),
     );
   }

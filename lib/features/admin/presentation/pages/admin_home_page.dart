@@ -1,3 +1,4 @@
+import 'package:barbershop/features/admin/presentation/pages/admin_create_appointment_page.dart';
 import 'package:barbershop/features/admin/presentation/pages/admin_appointments_page.dart';
 import 'package:barbershop/features/admin/presentation/pages/admin_services_page.dart';
 import 'package:barbershop/features/admin/presentation/pages/admin_products_page.dart';
@@ -54,6 +55,19 @@ class _AdminHomePageState extends State<AdminHomePage> {
             },
           ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => const AdminCreateAppointmentPage()),
+          );
+        },
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.add),
+        label: const Text('Novo Agendamento'),
       ),
       body: Center(
         child: ConstrainedBox(

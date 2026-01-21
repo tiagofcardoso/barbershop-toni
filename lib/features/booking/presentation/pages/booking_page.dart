@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl_phone_field/intl_phone_field.dart';
 
 class BookingPage extends StatefulWidget {
   final ServiceModel service;
@@ -33,6 +35,12 @@ class _BookingPageState extends State<BookingPage> {
   void initState() {
     super.initState();
     _generateDates();
+    // Initialize _selectedDate immediately to avoid LateInitializationError during first build
+    if (_dates.isNotEmpty) {
+      _selectedDate = _dates[0];
+    } else {
+      _selectedDate = DateTime.now();
+    }
     _loadSettingsAndDefaults();
   }
 
@@ -535,7 +543,12 @@ class _BookingPageState extends State<BookingPage> {
 
           // Bottom Action Bar
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.fromLTRB(
+              16,
+              16,
+              16,
+              16 + MediaQuery.of(context).padding.bottom,
+            ),
             decoration: BoxDecoration(
               color: Colors.white,
               boxShadow: [
@@ -550,56 +563,7 @@ class _BookingPageState extends State<BookingPage> {
               width: double.infinity,
               height: 50,
               child: ElevatedButton(
-                onPressed: _selectedTime != null
-                    ? () async {
-                        final user = AuthService().currentUser;
-                        if (user == null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('Erro: Usuário não logado')),
-                          );
-                          return;
-                        }
-
-                        final timeParts = _selectedTime!.split(':');
-                        final dateTime = DateTime(
-                          _selectedDate.year,
-                          _selectedDate.month,
-                          _selectedDate.day,
-                          int.parse(timeParts[0]),
-                          int.parse(timeParts[1]),
-                        );
-
-                        // Calculate effective duration to save
-                        final isWeekday =
-                            _selectedDate.weekday != DateTime.saturday;
-                        final duration =
-                            _getServiceDuration(_selectedTime!, isWeekday);
-
-                        await FirestoreService().addAppointment({
-                          'dateTime': dateTime,
-                          'serviceName': widget.service.name,
-                          'servicePrice': widget.service.price,
-                          'durationMinutes': duration,
-                          'customerName': user.displayName ?? 'Cliente',
-                          'customerEmail': user.email,
-                          'customerId': user.uid,
-                          'status': 'Confirmado', // Auto-confirm
-                          'professionalId': widget.professionalId,
-                          'professionalName': widget.professionalName,
-                        });
-
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                                content: Text(
-                                    'Agendamento confirmado para ${DateFormat('dd/MM').format(_selectedDate)} às $_selectedTime!')),
-                          );
-                          Navigator.of(context)
-                              .popUntil((route) => route.isFirst);
-                        }
-                      }
-                    : null,
+                onPressed: _selectedTime != null ? _handleBooking : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.black,
                   foregroundColor: Colors.white,
@@ -618,5 +582,133 @@ class _BookingPageState extends State<BookingPage> {
         ],
       ),
     );
+  }
+
+  Future<void> _handleBooking() async {
+    final user = AuthService().currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Erro: Usuário não logado')),
+      );
+      return;
+    }
+
+    // 1. Check if user has phone number in Firestore
+    final userDoc = await FirestoreService().getUserData(user.uid);
+    final userData = userDoc.data();
+    String? userPhone = userData?['phoneNumber'];
+
+    if (userPhone == null || userPhone.isEmpty) {
+      // 2. Request Phone Number
+      if (mounted) {
+        await _showPhoneDialog(user.uid);
+      }
+    } else {
+      // 3. Proceed with Booking
+      await _submitBooking(user, userPhone);
+    }
+  }
+
+  Future<void> _showPhoneDialog(String userId) async {
+    final phoneController = TextEditingController();
+    String? completeNumber;
+    final formKey = GlobalKey<FormState>();
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Atualizar Perfil'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+                'Para finalizar o agendamento, precisamos do seu número de telefone.'),
+            const Gap(16),
+            Form(
+              key: formKey,
+              child: IntlPhoneField(
+                controller: phoneController,
+                decoration: const InputDecoration(
+                  labelText: 'Telefone',
+                  border: OutlineInputBorder(),
+                ),
+                initialCountryCode: 'PT',
+                onChanged: (phone) {
+                  completeNumber = phone.completeNumber;
+                },
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (formKey.currentState!.validate() && completeNumber != null) {
+                // Update User Profile
+                await FirestoreService().updateUserFields(
+                  userId,
+                  {'phoneNumber': completeNumber},
+                );
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  // Retry Booking
+                  final user = AuthService().currentUser;
+                  if (user != null) {
+                    await _submitBooking(user, completeNumber!);
+                  }
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.black,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Salvar e Continuar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _submitBooking(User user, String phone) async {
+    final timeParts = _selectedTime!.split(':');
+    final dateTime = DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+      int.parse(timeParts[0]),
+      int.parse(timeParts[1]),
+    );
+
+    final isWeekday = _selectedDate.weekday != DateTime.saturday;
+    final duration = _getServiceDuration(_selectedTime!, isWeekday);
+
+    await FirestoreService().addAppointment({
+      'dateTime': dateTime,
+      'serviceName': widget.service.name,
+      'servicePrice': widget.service.price,
+      'durationMinutes': duration,
+      'customerName': user.displayName ?? 'Cliente',
+      'customerEmail': user.email,
+      'customerPhone': phone, // NEW
+      'customerId': user.uid,
+      'status': 'Confirmado',
+      'professionalId': widget.professionalId,
+      'professionalName': widget.professionalName,
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(
+                'Agendamento confirmado para ${DateFormat('dd/MM').format(_selectedDate)} às $_selectedTime!')),
+      );
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    }
   }
 }
