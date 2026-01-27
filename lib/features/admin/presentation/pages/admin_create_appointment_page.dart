@@ -148,16 +148,18 @@ class _AdminCreateAppointmentPageState
     if (stepMinutes < 15) {
       stepMinutes = 30;
     }
+    // For services >= 60 min, allow one extra slot starting 30 min before close
+    // Example: Close at 19:00, service 60min -> allow slot at 18:30 (ends 19:30)
+    int effectiveCloseMinutes = closeMinutes;
+    if (stepMinutes >= 60) {
+      effectiveCloseMinutes = closeMinutes + 30; // Allow 30 min overtime
+    }
 
-    while (currentMinutes + stepMinutes <= closeMinutes) {
+    while (currentMinutes + stepMinutes <= effectiveCloseMinutes) {
       int endMinutes = currentMinutes + stepMinutes;
-      int effectiveStep = stepMinutes;
-      if (isWeekday && currentMinutes == lunchEndMinutes) {
-        effectiveStep += 15;
-        endMinutes = currentMinutes + effectiveStep;
-      }
 
       bool overlapsLunch = false;
+      // Lunch Overlap Rule: Skip slots that overlap with lunch break
       if (currentMinutes < lunchEndMinutes && endMinutes > lunchStartMinutes) {
         overlapsLunch = true;
       }
@@ -166,7 +168,7 @@ class _AdminCreateAppointmentPageState
         int h = currentMinutes ~/ 60;
         int m = currentMinutes % 60;
         slots.add(_formatTime(TimeOfDay(hour: h, minute: m)));
-        currentMinutes += effectiveStep;
+        currentMinutes += stepMinutes;
       } else {
         if (currentMinutes < lunchEndMinutes) {
           currentMinutes = lunchEndMinutes;
